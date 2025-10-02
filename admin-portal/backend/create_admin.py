@@ -5,6 +5,19 @@ from app.models.user import User
 from app.models.base import Base
 from app.core.security import get_password_hash
 
+def validate_password(password: str) -> str:
+    """Validate and truncate password if needed"""
+    password_bytes = password.encode('utf-8')
+    
+    if len(password_bytes) > 72:
+        print(f"⚠️  Password length: {len(password_bytes)} bytes (max: 72)")
+        print("⚠️  Truncating password to 72 bytes...")
+        password = password_bytes[:72].decode('utf-8', errors='ignore')
+        password_bytes = password.encode('utf-8')
+    
+    print(f"✓ Password length: {len(password_bytes)} bytes")
+    return password
+
 def create_admin():
     """Create admin user if it doesn't exist"""
     
@@ -24,8 +37,11 @@ def create_admin():
         
         # Get admin credentials from environment or use defaults
         admin_username = os.getenv("ADMIN_USERNAME", "admin")
-        admin_password = os.getenv("ADMIN_PASSWORD", "aFGWREGF")
+        admin_password = os.getenv("ADMIN_PASSWORD", "Admin@2024!")  # Updated default
         admin_email = os.getenv("ADMIN_EMAIL", "admin@literature-db.com")
+        
+        # Validate password length
+        admin_password = validate_password(admin_password)
         
         # Create admin user
         admin_user = User(
@@ -53,7 +69,6 @@ def create_admin():
     except Exception as e:
         print(f"❌ Error creating admin user: {e}")
         db.rollback()
-        # Don't fail the build if admin creation fails
         print("⚠️  Continuing with deployment...")
     finally:
         db.close()
