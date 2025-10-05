@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 from typing import Optional, List
 from datetime import datetime
 
@@ -13,14 +13,14 @@ class ProjectImageResponse(ProjectImageBase):
     project_id: int
     image_size: Optional[int] = None
     created_at: datetime
+    updated_at: Optional[datetime] = None  # Make optional to handle missing column
     
     @property
     def image_url(self) -> str:
         # Return the correct URL without double /api/
         return f"/projects/{self.project_id}/images/{self.id}"
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class ProjectBase(BaseModel):
     title: str
@@ -61,18 +61,18 @@ class ProjectResponse(ProjectBase):
     id: int
     slug: str
     is_published: bool
-    publication_date: datetime
-    view_count: int
-    download_count: int
+    publication_date: Optional[datetime] = None  # Make optional to handle NULL values
+    view_count: int = 0  # Provide defaults
+    download_count: int = 0
     
-    # Legacy image fields
-    images: Optional[List[str]] = []
-    featured_image_index: Optional[int] = 0
+    # Legacy image fields with defaults
+    images: List[str] = Field(default_factory=list)
+    featured_image_index: int = 0
     
-    # New image records
-    image_records: List[ProjectImageResponse] = []
+    # New image records with default
+    image_records: List[ProjectImageResponse] = Field(default_factory=list)
     
-    # Database Storage Fields
+    # Database Storage Fields - all optional
     document_filename: Optional[str] = None
     document_size: Optional[int] = None
     document_content_type: Optional[str] = None
@@ -81,13 +81,12 @@ class ProjectResponse(ProjectBase):
     # Metadata
     created_by_id: Optional[int] = None
     created_at: datetime
-    updated_at: datetime
+    updated_at: Optional[datetime] = None  # Make optional for safety
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
-    def __init__(self, **data):
-        super().__init__(**data)
+    def model_post_init(self, __context) -> None:
+        """Called after the model is initialized. Replaces __init__ override in Pydantic v2."""
         # Populate image URLs for backward compatibility
         if self.image_records:
             self.images = [f"/api/projects/{self.id}/images/{img.id}" for img in self.image_records]
@@ -106,3 +105,22 @@ class SetFeaturedImageRequest(BaseModel):
 
 class ReorderImagesRequest(BaseModel):
     image_ids: List[int]
+
+# Additional schemas for better error handling
+class ProjectListResponse(BaseModel):
+    """Response model for project list endpoints"""
+    projects: List[ProjectResponse]
+    total: int
+    page: int = 1
+    page_size: int = 100
+    
+    model_config = ConfigDict(from_attributes=True)
+
+class ProjectStats(BaseModel):
+    """Stats response model"""
+    total_projects: int = 0
+    published_projects: int = 0
+    total_views: int = 0
+    total_downloads: int = 0
+    
+    model_config = ConfigDict(from_attributes=True)
