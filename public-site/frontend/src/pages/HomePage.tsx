@@ -37,7 +37,8 @@ import {
   EmojiObjects as InnovationIcon,
   Favorite as HeartIcon,
   Groups as CommunityIcon,
-  TouchApp as TouchIcon
+  TouchApp as TouchIcon,
+  Assessment as AssessmentIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
@@ -1236,7 +1237,7 @@ const HomePage: React.FC = () => {
                 color: '#1a7a5e'
               },
               {
-                icon: AnalyticsIcon, // or AnalyticsIcon, InsightsIcon
+                icon: AssessmentIcon, 
                 title: 'Data-Driven Solutions',
                 description: 'Using advanced analytics and evidence-based approaches to solve complex health challenges effectively.',
                 color: '#2a9d7f'
