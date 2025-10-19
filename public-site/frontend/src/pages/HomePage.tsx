@@ -940,7 +940,7 @@ const HomePage: React.FC = () => {
                       }}
                       onClick={() => navigate(`/projects/${project.slug}`)}
                     >
-                      {/* Project Image/Gradient Header with School Logo */}
+                      {/* Project Image/Gradient Header */}
                       <Box
                         className="project-image"
                         sx={{
@@ -992,7 +992,6 @@ const HomePage: React.FC = () => {
                           </Typography>
                         </Box>
                       </Box>
-
                       <CardContent sx={{ flexGrow: 1, p: { xs: 1.5, sm: 2, md: 3 } }}>
                         <Typography
                           variant="h6"
