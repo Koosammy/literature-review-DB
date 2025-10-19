@@ -942,25 +942,16 @@ const HomePage: React.FC = () => {
                     >
                       {/* Project Image/Gradient Header */}
                       <Box
-                        className="project-image"
-                        sx={{
-                          height: { xs: 120, sm: 150, md: 180, lg: 200 },
-                          background: `linear-gradient(135deg, ${
-                            ['#0a4f3c', '#1a7a5e', '#2a9d7f'][index % 3]
-                          } 0%, ${
-                            ['#1a7a5e', '#2a9d7f', '#3ac0a0'][index % 3]
-                          } 100%)`,
-                          position: 'relative',
-                          transition: 'transform 0.3s ease',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center'
-                        }}
-                      >
-                        <ResearchIcon sx={{ 
-                          fontSize: { xs: 32, sm: 40, md: 50, lg: 60 }, 
-                          color: 'rgba(255,255,255,0.3)' 
-                        }} />
+                        component="img"
+                        src="/images/school-logo.png"
+                        alt="School Logo"
+                        sx={{ 
+                          width: { xs: 60, sm: 80, md: 100, lg: 120 },
+                          height: { xs: 60, sm: 80, md: 100, lg: 120 },
+                          objectFit: 'contain',
+                          opacity: 0.9  // More visible
+                        }} 
+                      />
                         <Box
                           sx={{
                             position: 'absolute',
