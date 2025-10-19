@@ -1236,7 +1236,7 @@ const HomePage: React.FC = () => {
                 color: '#1a7a5e'
               },
               {
-                icon: DataIcon, // or AnalyticsIcon, InsightsIcon
+                icon: AnalyticsIcon, // or AnalyticsIcon, InsightsIcon
                 title: 'Data-Driven Solutions',
                 description: 'Using advanced analytics and evidence-based approaches to solve complex health challenges effectively.',
                 color: '#2a9d7f'
