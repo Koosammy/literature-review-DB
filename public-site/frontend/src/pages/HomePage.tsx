@@ -940,18 +940,35 @@ const HomePage: React.FC = () => {
                       }}
                       onClick={() => navigate(`/projects/${project.slug}`)}
                     >
-                      {/* Project Image/Gradient Header */}
+                      {/* Project Image/Gradient Header with School Logo */}
                       <Box
-                        component="img"
-                        src="/images/school-logo.png"
-                        alt="School Logo"
-                        sx={{ 
-                          width: { xs: 60, sm: 80, md: 100, lg: 120 },
-                          height: { xs: 60, sm: 80, md: 100, lg: 120 },
-                          objectFit: 'contain',
-                          opacity: 0.9  // More visible
-                        }} 
-                      />
+                        className="project-image"
+                        sx={{
+                          height: { xs: 120, sm: 150, md: 180, lg: 200 },
+                          background: `linear-gradient(135deg, ${
+                            ['#0a4f3c', '#1a7a5e', '#2a9d7f'][index % 3]
+                          } 0%, ${
+                            ['#1a7a5e', '#2a9d7f', '#3ac0a0'][index % 3]
+                          } 100%)`,
+                          position: 'relative',
+                          transition: 'transform 0.3s ease',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}
+                      >
+                        <Box
+                          component="img"
+                          src="/images/school-logo.tif"
+                          alt="School Logo"
+                          sx={{ 
+                            width: { xs: 60, sm: 80, md: 100, lg: 120 },
+                            height: { xs: 60, sm: 80, md: 100, lg: 120 },
+                            objectFit: 'contain',
+                            opacity: 0.3,
+                            filter: 'brightness(0) invert(1)'
+                          }} 
+                        />
                         <Box
                           sx={{
                             position: 'absolute',
@@ -1206,7 +1223,7 @@ const HomePage: React.FC = () => {
               {
                 icon: InnovationIcon,
                 title: 'Innovation Hub',
-                description: 'State-of-the-art facilities and interdisciplinary collaboration foster breakthrough discoveries in public health.',
+                description: 'Modern facilities and teamwork across different fields drive new discoveries in public health.',
                 color: '#1a7a5e'
               },
               {
@@ -1224,7 +1241,7 @@ const HomePage: React.FC = () => {
               {
                 icon: ResearchIcon,
                 title: 'Research Excellence',
-                description: 'Leading groundbreaking studies that shape health policy.',
+                description: 'Conducting high-quality studies that advance medical knowledge and improve health outcomes worldwide.',
                 color: '#1a7a5e'
               },
               {
@@ -1233,8 +1250,6 @@ const HomePage: React.FC = () => {
                 description: 'Using advanced analytics and evidence-based approaches to solve complex health challenges effectively.',
                 color: '#2a9d7f'
               }
-    
-              
             ].slice(0, isMobile ? 4 : 6).map((feature, index) => (
               <Grid item xs={12} sm={6} lg={4} key={index}>
                 <motion.div
