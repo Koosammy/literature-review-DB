@@ -1208,7 +1208,7 @@ const HomePage: React.FC = () => {
               {
                 icon: PublicIcon,
                 title: 'Global Impact',
-                description: 'Our research and programs reach communities across all regions, addressing health challenges at local and global scales.',
+                description: 'Our research reaches communities across all regions, addressing health challenges at local and global scales.',
                 color: '#0a4f3c'
               },
               {
@@ -1234,7 +1234,14 @@ const HomePage: React.FC = () => {
                 title: 'Research Excellence',
                 description: 'Leading groundbreaking studies that shape health policy.',
                 color: '#1a7a5e'
+              },
+              {
+                icon: DataIcon, // or AnalyticsIcon, InsightsIcon
+                title: 'Data-Driven Solutions',
+                description: 'Using advanced analytics and evidence-based approaches to solve complex health challenges effectively.',
+                color: '#2a9d7f'
               }
+    
               
             ].slice(0, isMobile ? 4 : 6).map((feature, index) => (
               <Grid item xs={12} sm={6} lg={4} key={index}>
