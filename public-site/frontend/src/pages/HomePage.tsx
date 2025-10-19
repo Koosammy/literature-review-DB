@@ -1234,13 +1234,8 @@ const HomePage: React.FC = () => {
                 title: 'Research Excellence',
                 description: 'Leading groundbreaking studies that shape health policy.',
                 color: '#1a7a5e'
-              },
-              {
-                icon: TrendingIcon,
-                title: 'Career Growth',
-                description: '95% of our graduates secure positions in top health organizations within 6 months of graduation.',
-                color: '#2a9d7f'
               }
+              
             ].slice(0, isMobile ? 4 : 6).map((feature, index) => (
               <Grid item xs={12} sm={6} lg={4} key={index}>
                 <motion.div
