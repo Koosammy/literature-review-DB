@@ -45,6 +45,5 @@ ACADEMIC_YEARS = [f"{year}/{year+1}" for year in range(current_year, current_yea
 
 # UHAS specific institutions/campuses
 INSTITUTIONS = [
-    "UHAS - School of Public Health",
-    "Others"
+    "UHAS - FRED N. BINKA School of Public Health",
 ]
