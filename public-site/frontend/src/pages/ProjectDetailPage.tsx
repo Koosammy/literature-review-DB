@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -16,14 +16,17 @@ import {
   Avatar,
   useTheme,
   useMediaQuery,
-  ImageList,
-  ImageListItem,
   Modal,
   Backdrop,
   Fade,
   IconButton,
   Dialog,
-  DialogContent
+  DialogContent,
+  Skeleton,
+  Zoom,
+  alpha,
+  Tooltip,
+  Badge,
 } from '@mui/material';
 import {
   Download as DownloadIcon,
@@ -39,7 +42,13 @@ import {
   Close as CloseIcon,
   ChevronLeft as ChevronLeftIcon,
   ChevronRight as ChevronRightIcon,
-  Image as ImageIcon
+  Image as ImageIcon,
+  ZoomIn as ZoomInIcon,
+  Star as StarIcon,
+  Collections as CollectionsIcon,
+  Fullscreen as FullscreenIcon,
+  GridView as GridViewIcon,
+  ViewCarousel as ViewCarouselIcon,
 } from '@mui/icons-material';
 import { apiService } from '../services/api';
 import DocumentViewer from '../components/DocumentViewer';
@@ -85,7 +94,7 @@ const getImageUrl = (projectId: number, imageId: number): string => {
   return `${process.env.REACT_APP_API_URL}/projects/${projectId}/images/${imageId}`;
 };
 
-// Updated Image Gallery Component
+// Enhanced Modern Image Gallery Component
 const ImageGallery: React.FC<{ 
   imageRecords: ProjectImage[];
   projectId: number;
@@ -93,12 +102,30 @@ const ImageGallery: React.FC<{
 }> = ({ imageRecords, projectId, projectTitle }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isTablet = useMediaQuery(theme.breakpoints.down('md'));
+  
   const [selectedImage, setSelectedImage] = useState<ProjectImage | null>(null);
   const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null);
   const [imageErrors, setImageErrors] = useState<{ [key: number]: boolean }>({});
+  const [imageLoading, setImageLoading] = useState<{ [key: number]: boolean }>({});
+  const [viewMode, setViewMode] = useState<'grid' | 'carousel'>('grid');
+  const [hoveredImage, setHoveredImage] = useState<number | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [carouselIndex, setCarouselIndex] = useState(0);
 
-  // Sort images by order_index
-  const sortedImages = [...imageRecords].sort((a, b) => a.order_index - b.order_index);
+  // Sort images by order_index, with featured images first
+  const sortedImages = [...imageRecords].sort((a, b) => {
+    if (a.is_featured && !b.is_featured) return -1;
+    if (!a.is_featured && b.is_featured) return 1;
+    return a.order_index - b.order_index;
+  });
+
+  // Grid columns based on screen size
+  const getGridColumns = () => {
+    if (isMobile) return 2;
+    if (isTablet) return 3;
+    return 4;
+  };
 
   const handleImageClick = (image: ProjectImage, index: number) => {
     setSelectedImage(image);
@@ -108,30 +135,36 @@ const ImageGallery: React.FC<{
   const handleCloseImageDialog = () => {
     setSelectedImage(null);
     setSelectedImageIndex(null);
+    setIsFullscreen(false);
   };
 
   const handleImageError = (imageId: number) => {
     console.error(`Failed to load image with id: ${imageId}`);
     setImageErrors(prev => ({ ...prev, [imageId]: true }));
+    setImageLoading(prev => ({ ...prev, [imageId]: false }));
   };
 
-  const handlePrevious = () => {
+  const handleImageLoad = (imageId: number) => {
+    setImageLoading(prev => ({ ...prev, [imageId]: false }));
+  };
+
+  const handlePrevious = useCallback(() => {
     if (selectedImageIndex !== null && selectedImageIndex > 0) {
       const newIndex = selectedImageIndex - 1;
       setSelectedImageIndex(newIndex);
       setSelectedImage(sortedImages[newIndex]);
     }
-  };
+  }, [selectedImageIndex, sortedImages]);
 
-  const handleNext = () => {
+  const handleNext = useCallback(() => {
     if (selectedImageIndex !== null && selectedImageIndex < sortedImages.length - 1) {
       const newIndex = selectedImageIndex + 1;
       setSelectedImageIndex(newIndex);
       setSelectedImage(sortedImages[newIndex]);
     }
-  };
+  }, [selectedImageIndex, sortedImages]);
 
-  const handleKeyDown = (event: React.KeyboardEvent) => {
+  const handleKeyDown = useCallback((event: React.KeyboardEvent | KeyboardEvent) => {
     if (event.key === 'ArrowLeft') {
       handlePrevious();
     } else if (event.key === 'ArrowRight') {
@@ -139,92 +172,578 @@ const ImageGallery: React.FC<{
     } else if (event.key === 'Escape') {
       handleCloseImageDialog();
     }
+  }, [handlePrevious, handleNext]);
+
+  const handleDownloadImage = (image: ProjectImage) => {
+    const link = document.createElement('a');
+    link.href = getImageUrl(projectId, image.id);
+    link.download = image.filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const toggleFullscreen = () => {
+    setIsFullscreen(!isFullscreen);
+  };
+
+  // Initialize loading states
+  useEffect(() => {
+    const loadingStates: { [key: number]: boolean } = {};
+    sortedImages.forEach(img => {
+      loadingStates[img.id] = true;
+    });
+    setImageLoading(loadingStates);
+  }, [imageRecords]);
+
+  // Carousel navigation
+  const handleCarouselPrevious = () => {
+    setCarouselIndex(prev => prev > 0 ? prev - 1 : sortedImages.length - 1);
+  };
+
+  const handleCarouselNext = () => {
+    setCarouselIndex(prev => prev < sortedImages.length - 1 ? prev + 1 : 0);
   };
 
   return (
     <>
-      <Paper elevation={0} sx={{ p: 4, mb: 3, borderRadius: 2 }}>
-        <Typography variant="h5" gutterBottom sx={{ fontWeight: 600 }}>
-          Figures & Images
-        </Typography>
-        <ImageList sx={{ width: '100%', height: 450 }} cols={3} rowHeight={164}>
-          {sortedImages.map((image, index) => (
-            <ImageListItem 
-              key={image.id}
-              sx={{ cursor: 'pointer' }}
-              onClick={() => handleImageClick(image, index)}
-            >
-              {imageErrors[image.id] ? (
+      <Paper 
+        elevation={0} 
+        sx={{ 
+          p: { xs: 2, sm: 3, md: 4 },
+          mb: 3,
+          borderRadius: 3,
+          background: `linear-gradient(135deg, ${alpha('#1b5e20', 0.02)} 0%, ${alpha('#2e7d32', 0.05)} 100%)`,
+          border: `2px solid ${alpha('#2e7d32', 0.15)}`,
+          position: 'relative',
+          overflow: 'hidden',
+          '&::before': {
+            content: '""',
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            height: '4px',
+            background: 'linear-gradient(90deg, #1b5e20, #2e7d32, #388e3c)',
+          }
+        }}
+      >
+        {/* Header Section */}
+        <Box sx={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'space-between',
+          mb: 3,
+          flexWrap: 'wrap',
+          gap: 2
+        }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Box sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: { xs: 40, sm: 48 },
+              height: { xs: 40, sm: 48 },
+              borderRadius: 2,
+              background: 'linear-gradient(135deg, #1b5e20, #0d4715)',
+              boxShadow: '0 4px 12px rgba(27, 94, 32, 0.3)',
+            }}>
+              <CollectionsIcon sx={{ color: 'white', fontSize: { xs: 20, sm: 24 } }} />
+            </Box>
+            <Box>
+              <Typography 
+                variant="h5" 
+                sx={{ 
+                  fontWeight: 700,
+                  color: '#1b5e20',
+                  fontSize: { xs: '1.25rem', sm: '1.5rem' },
+                  letterSpacing: '-0.02em'
+                }}
+              >
+                Figures & Images
+              </Typography>
+              <Typography 
+                variant="body2" 
+                sx={{ 
+                  color: '#2e7d32',
+                  mt: 0.5,
+                  fontWeight: 500
+                }}
+              >
+                {sortedImages.length} {sortedImages.length === 1 ? 'image' : 'images'} available
+              </Typography>
+            </Box>
+          </Box>
+
+          {/* View Mode Toggle */}
+          <Box sx={{ display: 'flex', gap: 1, bgcolor: alpha('#1b5e20', 0.05), borderRadius: 2, p: 0.5 }}>
+            <Tooltip title="Grid View">
+              <IconButton
+                onClick={() => setViewMode('grid')}
+                sx={{
+                  bgcolor: viewMode === 'grid' ? '#1b5e20' : 'transparent',
+                  color: viewMode === 'grid' ? 'white' : '#2e7d32',
+                  borderRadius: 1.5,
+                  '&:hover': {
+                    bgcolor: viewMode === 'grid' 
+                      ? '#0d4715' 
+                      : alpha('#1b5e20', 0.1)
+                  }
+                }}
+              >
+                <GridViewIcon />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Carousel View">
+              <IconButton
+                onClick={() => setViewMode('carousel')}
+                sx={{
+                  bgcolor: viewMode === 'carousel' ? '#1b5e20' : 'transparent',
+                  color: viewMode === 'carousel' ? 'white' : '#2e7d32',
+                  borderRadius: 1.5,
+                  '&:hover': {
+                    bgcolor: viewMode === 'carousel' 
+                      ? '#0d4715' 
+                      : alpha('#1b5e20', 0.1)
+                  }
+                }}
+              >
+                <ViewCarouselIcon />
+              </IconButton>
+            </Tooltip>
+          </Box>
+        </Box>
+
+        {/* Images Grid/Carousel */}
+        {viewMode === 'grid' ? (
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: `repeat(${getGridColumns()}, 1fr)`,
+              gap: { xs: 1.5, sm: 2, md: 2.5 },
+              width: '100%',
+            }}
+          >
+            {sortedImages.map((image, index) => (
+              <Zoom in={true} key={image.id} style={{ transitionDelay: `${index * 50}ms` }}>
                 <Box
                   sx={{
+                    position: 'relative',
+                    paddingTop: '100%',
+                    borderRadius: 2.5,
+                    overflow: 'hidden',
+                    cursor: 'pointer',
+                    bgcolor: '#f5f5f5',
+                    border: `2px solid ${image.is_featured 
+                      ? '#ffa726' 
+                      : alpha('#c8e6c9', 0.8)}`,
+                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+                    '&:hover': {
+                      transform: 'translateY(-6px) scale(1.03)',
+                      boxShadow: '0 16px 32px rgba(27, 94, 32, 0.2)',
+                      borderColor: '#1b5e20',
+                      '& .image-overlay': {
+                        opacity: 1,
+                      },
+                      '& img': {
+                        transform: 'scale(1.1)',
+                      }
+                    }
+                  }}
+                  onClick={() => handleImageClick(image, index)}
+                  onMouseEnter={() => setHoveredImage(image.id)}
+                  onMouseLeave={() => setHoveredImage(null)}
+                >
+                  {/* Featured Badge */}
+                  {image.is_featured && (
+                    <Chip
+                      icon={<StarIcon sx={{ fontSize: 14 }} />}
+                      label="Featured"
+                      size="small"
+                      sx={{
+                        position: 'absolute',
+                        top: 8,
+                        left: 8,
+                        zIndex: 2,
+                        bgcolor: '#ffa726',
+                        color: 'white',
+                        fontWeight: 700,
+                        fontSize: '0.65rem',
+                        height: 22,
+                        boxShadow: '0 2px 8px rgba(255, 167, 38, 0.4)',
+                        '& .MuiChip-icon': {
+                          color: 'white',
+                        }
+                      }}
+                    />
+                  )}
+
+                  {/* Image Number Badge */}
+                  <Box
+                    sx={{
+                      position: 'absolute',
+                      top: 8,
+                      right: 8,
+                      zIndex: 2,
+                      bgcolor: alpha('#000', 0.6),
+                      backdropFilter: 'blur(8px)',
+                      color: 'white',
+                      px: 1,
+                      py: 0.5,
+                      borderRadius: 1,
+                      fontSize: '0.7rem',
+                      fontWeight: 600,
+                    }}
+                  >
+                    {index + 1}/{sortedImages.length}
+                  </Box>
+
+                  {/* Loading Skeleton */}
+                  {imageLoading[image.id] && (
+                    <Skeleton
+                      variant="rectangular"
+                      animation="wave"
+                      sx={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        width: '100%',
+                        height: '100%',
+                        bgcolor: alpha('#1b5e20', 0.1)
+                      }}
+                    />
+                  )}
+
+                  {/* Error State */}
+                  {imageErrors[image.id] ? (
+                    <Box
+                      sx={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        width: '100%',
+                        height: '100%',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        bgcolor: '#f5f5f5',
+                        color: '#666',
+                      }}
+                    >
+                      <ImageIcon sx={{ fontSize: 40, mb: 1, opacity: 0.3 }} />
+                      <Typography variant="caption">Image unavailable</Typography>
+                    </Box>
+                  ) : (
+                    <>
+                      <img
+                        src={getImageUrl(projectId, image.id)}
+                        alt={image.filename}
+                        loading="lazy"
+                        style={{
+                          position: 'absolute',
+                          top: 0,
+                          left: 0,
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover',
+                          transition: 'transform 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+                        }}
+                        onLoad={() => handleImageLoad(image.id)}
+                        onError={() => handleImageError(image.id)}
+                      />
+
+                      {/* Hover Overlay */}
+                      <Box
+                        className="image-overlay"
+                        sx={{
+                          position: 'absolute',
+                          top: 0,
+                          left: 0,
+                          width: '100%',
+                          height: '100%',
+                          background: 'linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.8) 100%)',
+                          display: 'flex',
+                          alignItems: 'flex-end',
+                          padding: 2,
+                          opacity: 0,
+                          transition: 'opacity 0.3s ease-in-out',
+                        }}
+                      >
+                        <Box sx={{ color: 'white', width: '100%' }}>
+                          <Typography variant="caption" sx={{ 
+                            fontWeight: 600,
+                            display: 'block',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            mb: 0.5
+                          }}>
+                            {image.filename}
+                          </Typography>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                            <ZoomInIcon sx={{ fontSize: 14 }} />
+                            <Typography variant="caption" sx={{ fontSize: '0.65rem', opacity: 0.9 }}>
+                              Click to expand
+                            </Typography>
+                          </Box>
+                        </Box>
+                      </Box>
+                    </>
+                  )}
+                </Box>
+              </Zoom>
+            ))}
+          </Box>
+        ) : (
+          // Carousel View
+          <Box sx={{ 
+            position: 'relative',
+            width: '100%',
+            height: { xs: 300, sm: 400, md: 500 },
+            borderRadius: 3,
+            overflow: 'hidden',
+            bgcolor: '#f5f5f5',
+            boxShadow: '0 4px 16px rgba(27, 94, 32, 0.1)',
+          }}>
+            {sortedImages.map((image, index) => (
+              <Fade in={carouselIndex === index} key={image.id}>
+                <Box
+                  sx={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
                     width: '100%',
                     height: '100%',
-                    display: 'flex',
+                    display: carouselIndex === index ? 'flex' : 'none',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    bgcolor: '#f5f5f5',
-                    color: '#666'
+                    cursor: 'pointer',
+                    bgcolor: '#fafafa',
                   }}
+                  onClick={() => handleImageClick(image, index)}
                 >
-                  <Typography variant="caption">Image unavailable</Typography>
+                  {imageErrors[image.id] ? (
+                    <Box sx={{ textAlign: 'center', color: '#666' }}>
+                      <CollectionsIcon sx={{ fontSize: 60, mb: 2, opacity: 0.3 }} />
+                      <Typography>Image unavailable</Typography>
+                    </Box>
+                  ) : (
+                    <img
+                      src={getImageUrl(projectId, image.id)}
+                      alt={image.filename}
+                      style={{
+                        maxWidth: '100%',
+                        maxHeight: '100%',
+                        objectFit: 'contain',
+                      }}
+                      onError={() => handleImageError(image.id)}
+                    />
+                  )}
                 </Box>
-              ) : (
-                <img
-                  src={getImageUrl(projectId, image.id)}
-                  alt={image.filename}
-                  loading="lazy"
-                  style={{ 
-                    height: '100%', 
-                    objectFit: 'cover',
-                    border: image.is_featured ? '3px solid #1976d2' : 'none'
+              </Fade>
+            ))}
+
+            {/* Carousel Navigation */}
+            <IconButton
+              onClick={handleCarouselPrevious}
+              sx={{
+                position: 'absolute',
+                left: 16,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                bgcolor: alpha('#000', 0.5),
+                color: 'white',
+                '&:hover': {
+                  bgcolor: alpha('#000', 0.7),
+                }
+              }}
+            >
+              <ChevronLeftIcon />
+            </IconButton>
+
+            <IconButton
+              onClick={handleCarouselNext}
+              sx={{
+                position: 'absolute',
+                right: 16,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                bgcolor: alpha('#000', 0.5),
+                color: 'white',
+                '&:hover': {
+                  bgcolor: alpha('#000', 0.7),
+                }
+              }}
+            >
+              <ChevronRightIcon />
+            </IconButton>
+
+            {/* Carousel Indicators */}
+            <Box sx={{
+              position: 'absolute',
+              bottom: 16,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              display: 'flex',
+              gap: 1,
+              p: 1,
+              borderRadius: 2,
+              bgcolor: alpha('#000', 0.3),
+              backdropFilter: 'blur(8px)',
+            }}>
+              {sortedImages.map((_, index) => (
+                <Box
+                  key={index}
+                  onClick={() => setCarouselIndex(index)}
+                  sx={{
+                    width: carouselIndex === index ? 24 : 8,
+                    height: 8,
+                    borderRadius: 4,
+                    bgcolor: carouselIndex === index ? 'white' : alpha('#fff', 0.5),
+                    cursor: 'pointer',
+                    transition: 'all 0.3s',
+                    '&:hover': {
+                      bgcolor: carouselIndex === index ? 'white' : alpha('#fff', 0.7),
+                    }
                   }}
-                  onError={() => handleImageError(image.id)}
                 />
-              )}
-            </ImageListItem>
-          ))}
-        </ImageList>
+              ))}
+            </Box>
+          </Box>
+        )}
       </Paper>
 
-      {/* Image Dialog */}
+      {/* Enhanced Lightbox Dialog */}
       <Dialog
         open={selectedImage !== null}
         onClose={handleCloseImageDialog}
-        maxWidth="lg"
+        maxWidth={isFullscreen ? false : 'lg'}
         fullWidth
+        fullScreen={isFullscreen}
         onKeyDown={handleKeyDown}
+        sx={{
+          '& .MuiDialog-paper': {
+            bgcolor: isFullscreen ? 'black' : 'background.paper',
+            borderRadius: isFullscreen ? 0 : 3,
+          }
+        }}
       >
-        <DialogContent sx={{ position: 'relative', p: 0 }}>
-          <IconButton
-            onClick={handleCloseImageDialog}
+        <DialogContent 
+          sx={{ 
+            position: 'relative',
+            p: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            bgcolor: isFullscreen ? 'black' : '#fafafa',
+            minHeight: { xs: 400, sm: 500, md: 600 },
+          }}
+        >
+          {/* Top Controls Bar */}
+          <Box
             sx={{
               position: 'absolute',
-              right: 8,
-              top: 8,
-              bgcolor: 'background.paper',
-              zIndex: 1,
+              top: 0,
+              left: 0,
+              right: 0,
+              p: 2,
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              background: 'linear-gradient(180deg, rgba(0,0,0,0.7) 0%, transparent 100%)',
+              zIndex: 2,
             }}
           >
-            <CloseIcon />
-          </IconButton>
+            <Typography 
+              variant="body2" 
+              sx={{ 
+                color: 'white',
+                fontWeight: 600,
+                px: 2,
+                py: 1,
+                bgcolor: alpha('#000', 0.5),
+                borderRadius: 2,
+                backdropFilter: 'blur(8px)',
+              }}
+            >
+              {selectedImageIndex !== null && `${selectedImageIndex + 1} / ${sortedImages.length}`}
+            </Typography>
+
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              {selectedImage && (
+                <Tooltip title="Download">
+                  <IconButton
+                    onClick={() => handleDownloadImage(selectedImage)}
+                    sx={{
+                      bgcolor: alpha('#fff', 0.1),
+                      color: 'white',
+                      backdropFilter: 'blur(8px)',
+                      '&:hover': {
+                        bgcolor: alpha('#fff', 0.2),
+                      }
+                    }}
+                  >
+                    <DownloadIcon />
+                  </IconButton>
+                </Tooltip>
+              )}
+
+              <Tooltip title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}>
+                <IconButton
+                  onClick={toggleFullscreen}
+                  sx={{
+                    bgcolor: alpha('#fff', 0.1),
+                    color: 'white',
+                    backdropFilter: 'blur(8px)',
+                    '&:hover': {
+                      bgcolor: alpha('#fff', 0.2),
+                    }
+                  }}
+                >
+                  <FullscreenIcon />
+                </IconButton>
+              </Tooltip>
+
+              <Tooltip title="Close">
+                <IconButton
+                  onClick={handleCloseImageDialog}
+                  sx={{
+                    bgcolor: alpha('#fff', 0.1),
+                    color: 'white',
+                    backdropFilter: 'blur(8px)',
+                    '&:hover': {
+                      bgcolor: alpha('#fff', 0.2),
+                    }
+                  }}
+                >
+                  <CloseIcon />
+                </IconButton>
+              </Tooltip>
+            </Box>
+          </Box>
           
-          {/* Navigation buttons */}
+          {/* Navigation Buttons */}
           {selectedImageIndex !== null && selectedImageIndex > 0 && (
             <IconButton
               onClick={handlePrevious}
               sx={{
                 position: 'absolute',
-                left: 8,
+                left: { xs: 8, sm: 24 },
                 top: '50%',
                 transform: 'translateY(-50%)',
-                bgcolor: 'rgba(0, 0, 0, 0.5)',
+                bgcolor: alpha('#000', 0.5),
                 color: 'white',
+                zIndex: 2,
+                backdropFilter: 'blur(8px)',
                 '&:hover': {
-                  bgcolor: 'rgba(0, 0, 0, 0.7)'
+                  bgcolor: alpha('#000', 0.7),
+                  transform: 'translateY(-50%) scale(1.1)',
                 }
               }}
             >
-              <ChevronLeftIcon />
+              <ChevronLeftIcon sx={{ fontSize: { xs: 24, sm: 32 } }} />
             </IconButton>
           )}
 
@@ -233,61 +752,177 @@ const ImageGallery: React.FC<{
               onClick={handleNext}
               sx={{
                 position: 'absolute',
-                right: 8,
+                right: { xs: 8, sm: 24 },
                 top: '50%',
                 transform: 'translateY(-50%)',
-                bgcolor: 'rgba(0, 0, 0, 0.5)',
+                bgcolor: alpha('#000', 0.5),
                 color: 'white',
+                zIndex: 2,
+                backdropFilter: 'blur(8px)',
                 '&:hover': {
-                  bgcolor: 'rgba(0, 0, 0, 0.7)'
+                  bgcolor: alpha('#000', 0.7),
+                  transform: 'translateY(-50%) scale(1.1)',
                 }
               }}
             >
-              <ChevronRightIcon />
+              <ChevronRightIcon sx={{ fontSize: { xs: 24, sm: 32 } }} />
             </IconButton>
           )}
 
+          {/* Image Display */}
           {selectedImage && (
-            <>
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '100%',
+                height: '100%',
+                p: isFullscreen ? 0 : { xs: 2, sm: 4 },
+              }}
+            >
               {imageErrors[selectedImage.id] ? (
-                <Box
-                  sx={{
-                    width: '100%',
-                    height: 400,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    bgcolor: '#f5f5f5',
-                    color: '#666'
-                  }}
-                >
+                <Box sx={{ 
+                  textAlign: 'center',
+                  color: isFullscreen ? 'white' : '#666' 
+                }}>
+                  <CollectionsIcon sx={{ fontSize: 80, mb: 2, opacity: 0.3 }} />
                   <Typography variant="h6">Image unavailable</Typography>
                 </Box>
               ) : (
                 <img
                   src={getImageUrl(projectId, selectedImage.id)}
                   alt={selectedImage.filename}
-                  style={{ width: '100%', height: 'auto' }}
+                  style={{
+                    maxWidth: '100%',
+                    maxHeight: '100%',
+                    objectFit: 'contain',
+                    borderRadius: isFullscreen ? 0 : 12,
+                    boxShadow: isFullscreen ? 'none' : '0 8px 32px rgba(0,0,0,0.2)',
+                  }}
                   onError={() => handleImageError(selectedImage.id)}
                 />
               )}
+            </Box>
+          )}
+
+          {/* Bottom Information Bar */}
+          {selectedImage && (
+            <Box
+              sx={{
+                position: 'absolute',
+                bottom: 0,
+                left: 0,
+                right: 0,
+                p: 2,
+                background: 'linear-gradient(0deg, rgba(0,0,0,0.7) 0%, transparent 100%)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
               <Typography
                 variant="body2"
                 sx={{
-                  position: 'absolute',
-                  bottom: 8,
-                  left: '50%',
-                  transform: 'translateX(-50%)',
-                  bgcolor: 'rgba(0, 0, 0, 0.7)',
                   color: 'white',
+                  textAlign: 'center',
+                  fontWeight: 500,
                   px: 2,
                   py: 1,
-                  borderRadius: 1
+                  bgcolor: alpha('#000', 0.5),
+                  borderRadius: 2,
+                  backdropFilter: 'blur(8px)',
                 }}
               >
-                {selectedImageIndex !== null && `Image ${selectedImageIndex + 1} of ${sortedImages.length}`}
+                {selectedImage.filename}
               </Typography>
-            </>
+            </Box>
+          )}
+
+          {/* Thumbnail Strip */}
+          {!isFullscreen && sortedImages.length > 1 && (
+            <Box
+              sx={{
+                position: 'absolute',
+                bottom: 60,
+                left: '50%',
+                transform: 'translateX(-50%)',
+                display: 'flex',
+                gap: 1,
+                p: 1,
+                maxWidth: '90%',
+                overflowX: 'auto',
+                bgcolor: alpha('#000', 0.7),
+                borderRadius: 2,
+                backdropFilter: 'blur(12px)',
+                '&::-webkit-scrollbar': {
+                  height: 4,
+                },
+                '&::-webkit-scrollbar-track': {
+                  bgcolor: alpha('#fff', 0.1),
+                  borderRadius: 2,
+                },
+                '&::-webkit-scrollbar-thumb': {
+                  bgcolor: alpha('#fff', 0.3),
+                  borderRadius: 2,
+                  '&:hover': {
+                    bgcolor: alpha('#fff', 0.5),
+                  }
+                },
+              }}
+            >
+              {sortedImages.map((image, index) => (
+                <Box
+                  key={image.id}
+                  onClick={() => {
+                    setSelectedImage(image);
+                    setSelectedImageIndex(index);
+                  }}
+                  sx={{
+                    width: 60,
+                    height: 60,
+                    borderRadius: 1,
+                    overflow: 'hidden',
+                    cursor: 'pointer',
+                    border: selectedImageIndex === index 
+                      ? '2px solid #1b5e20'
+                      : '2px solid transparent',
+                    opacity: selectedImageIndex === index ? 1 : 0.6,
+                    transition: 'all 0.3s',
+                    flexShrink: 0,
+                    '&:hover': {
+                      opacity: 1,
+                      transform: 'scale(1.1)',
+                      borderColor: '#2e7d32',
+                    }
+                  }}
+                >
+                  {imageErrors[image.id] ? (
+                    <Box sx={{
+                      width: '100%',
+                      height: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      bgcolor: '#333',
+                    }}>
+                      <ImageIcon sx={{ fontSize: 20, color: '#666' }} />
+                    </Box>
+                  ) : (
+                    <img
+                      src={getImageUrl(projectId, image.id)}
+                      alt={image.filename}
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'cover',
+                      }}
+                      onError={() => handleImageError(image.id)}
+                    />
+                  )}
+                </Box>
+              ))}
+            </Box>
           )}
         </DialogContent>
       </Dialog>
@@ -743,7 +1378,7 @@ const ProjectDetailPage: React.FC = () => {
               </Paper>
             )}
 
-            {/* Image Gallery - Updated to use image_records */}
+            {/* Enhanced Image Gallery */}
             {project.image_records && project.image_records.length > 0 && (
               <ImageGallery 
                 imageRecords={project.image_records} 
