@@ -522,12 +522,13 @@ const ProjectsPage: React.FC = () => {
         />
       )}
 
-      {/* Header */}
+      {/* Header - REDESIGNED FOR MOBILE */}
       <Box sx={{ 
         background: 'linear-gradient(135deg, #0d4715 0%, #1b5e20 50%, #2e7d32 100%)',
         color: 'white', 
-        py: { xs: 2, sm: 3, md: 4, lg: 6 },
+        py: { xs: 3, sm: 3, md: 4, lg: 6 },
         position: 'relative',
+        overflow: 'hidden',
         '&::before': {
           content: '""',
           position: 'absolute',
@@ -566,23 +567,67 @@ const ProjectsPage: React.FC = () => {
             </Typography>
           </Breadcrumbs>
           
-          <Grid container spacing={{ xs: 2, sm: 3, md: 4 }} alignItems="center">
-            {/* Left side content */}
-            <Grid item xs={12} md={isTablet ? 12 : 8}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1.5, sm: 2, md: 3 }, mb: 2 }}>
-                <Avatar
+          {/* Mobile Layout with Image */}
+          {(isMobile || isTablet) ? (
+            <Box>
+              {/* Mobile Header with integrated image */}
+              <Box sx={{ 
+                display: 'flex', 
+                flexDirection: 'column',
+                alignItems: 'center',
+                textAlign: 'center',
+                gap: { xs: 2, sm: 2.5 }
+              }}>
+                {/* Circular Image Container for Mobile */}
+                <Box
                   sx={{
-                    bgcolor: 'rgba(255,255,255,0.2)',
-                    width: { xs: 40, sm: 50, md: 60, lg: 80 },
-                    height: { xs: 40, sm: 50, md: 60, lg: 80 },
-                    border: '3px solid rgba(255,255,255,0.3)'
+                    width: { xs: 100, sm: 120, md: 140 },
+                    height: { xs: 100, sm: 120, md: 140 },
+                    borderRadius: '50%',
+                    border: '3px solid rgba(255,255,255,0.3)',
+                    boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+                    overflow: 'hidden',
+                    position: 'relative',
+                    background: 'white',
+                    mx: 'auto',
+                    mb: 1
                   }}
                 >
-                  <ResearchIcon sx={{ 
-                    fontSize: { xs: 20, sm: 24, md: 30, lg: 40 }, 
-                    color: 'white' 
-                  }} />
-                </Avatar>
+                  <img
+                    src="/images/student-research.jpeg" 
+                    alt="Public Health Research"
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover',
+                    }}
+                    onError={(e) => {
+                      // Fallback if image fails to load
+                      const target = e.target as HTMLImageElement;
+                      target.style.display = 'none';
+                      const parent = target.parentElement;
+                      if (parent) {
+                        parent.style.background = 'rgba(255,255,255,0.2)';
+                        parent.style.backdropFilter = 'blur(10px)';
+                        parent.innerHTML = `
+                          <div style="
+                            width: 100%;
+                            height: 100%;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                          ">
+                            <svg width="50" height="50" viewBox="0 0 24 24" fill="white">
+                              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                            </svg>
+                          </div>
+                        `;
+                      }
+                    }}
+                  />
+                </Box>
+
+                {/* Title and Description */}
                 <Box>
                   <Typography 
                     variant="h2" 
@@ -592,41 +637,100 @@ const ProjectsPage: React.FC = () => {
                       fontWeight: 'bold',
                       textShadow: '0 4px 8px rgba(0,0,0,0.3)',
                       fontSize: { 
-                        xs: isExtraSmall ? '1.25rem' : '1.5rem', 
-                        sm: '1.75rem', 
-                        md: '2.25rem', 
-                        lg: '3rem' 
+                        xs: isExtraSmall ? '1.5rem' : '1.75rem', 
+                        sm: '2rem', 
+                        md: '2.5rem'
                       },
                       lineHeight: 1.2,
-                      mb: { xs: 0.5, sm: 1 }
+                      mb: { xs: 1, sm: 1.5 }
                     }}
                   >
                     Public Health Research
                   </Typography>
+                  
+                  <Typography 
+                    variant="h5" 
+                    sx={{ 
+                      opacity: 0.95,
+                      textShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                      lineHeight: 1.4,
+                      fontSize: { 
+                        xs: isExtraSmall ? '0.85rem' : '0.95rem', 
+                        sm: '1.05rem', 
+                        md: '1.15rem'
+                      },
+                      px: { xs: 2, sm: 3 },
+                      maxWidth: { xs: '100%', sm: '500px', md: '600px' },
+                      mx: 'auto'
+                    }}
+                  >
+                    Discover evidence-based research advancing health equity and improving population health outcomes worldwide
+                  </Typography>
                 </Box>
               </Box>
-              <Typography 
-                variant="h5" 
-                sx={{ 
-                  opacity: 0.95,
-                  textShadow: '0 2px 4px rgba(0,0,0,0.2)',
-                  lineHeight: 1.4,
-                  fontSize: { 
-                    xs: isExtraSmall ? '0.8rem' : '0.875rem', 
-                    sm: '1rem', 
-                    md: '1.1rem', 
-                    lg: '1.25rem' 
-                  },
-                  px: { xs: 0, sm: 0 },
-                  textAlign: { xs: 'center', md: 'left' }
-                }}
-              >
-                Discover evidence-based research advancing health equity and improving population health outcomes worldwide
-              </Typography>
-            </Grid>
+            </Box>
+          ) : (
+            // Desktop Layout (original)
+            <Grid container spacing={{ xs: 2, sm: 3, md: 4 }} alignItems="center">
+              {/* Left side content */}
+              <Grid item xs={12} md={8}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1.5, sm: 2, md: 3 }, mb: 2 }}>
+                  <Avatar
+                    sx={{
+                      bgcolor: 'rgba(255,255,255,0.2)',
+                      width: { xs: 40, sm: 50, md: 60, lg: 80 },
+                      height: { xs: 40, sm: 50, md: 60, lg: 80 },
+                      border: '3px solid rgba(255,255,255,0.3)'
+                    }}
+                  >
+                    <ResearchIcon sx={{ 
+                      fontSize: { xs: 20, sm: 24, md: 30, lg: 40 }, 
+                      color: 'white' 
+                    }} />
+                  </Avatar>
+                  <Box>
+                    <Typography 
+                      variant="h2" 
+                      component="h1" 
+                      gutterBottom 
+                      sx={{ 
+                        fontWeight: 'bold',
+                        textShadow: '0 4px 8px rgba(0,0,0,0.3)',
+                        fontSize: { 
+                          xs: isExtraSmall ? '1.25rem' : '1.5rem', 
+                          sm: '1.75rem', 
+                          md: '2.25rem', 
+                          lg: '3rem' 
+                        },
+                        lineHeight: 1.2,
+                        mb: { xs: 0.5, sm: 1 }
+                      }}
+                    >
+                      Public Health Research
+                    </Typography>
+                  </Box>
+                </Box>
+                <Typography 
+                  variant="h5" 
+                  sx={{ 
+                    opacity: 0.95,
+                    textShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                    lineHeight: 1.4,
+                    fontSize: { 
+                      xs: isExtraSmall ? '0.8rem' : '0.875rem', 
+                      sm: '1rem', 
+                      md: '1.1rem', 
+                      lg: '1.25rem' 
+                    },
+                    px: { xs: 0, sm: 0 },
+                    textAlign: { xs: 'center', md: 'left' }
+                  }}
+                >
+                  Discover evidence-based research advancing health equity and improving population health outcomes worldwide
+                </Typography>
+              </Grid>
 
-            {/* Right side - Student with telescope image */}
-            {!isTablet && !isMobile && (
+              {/* Right side - Desktop image */}
               <Grid item xs={12} md={4}>
                 <Box sx={{ display: 'flex', justifyContent: 'center' }}>
                   <Box
@@ -638,8 +742,7 @@ const ProjectsPage: React.FC = () => {
                       boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
                       overflow: 'hidden',
                       position: 'relative',
-                      background: 'rgba(255,255,255,0.1)',
-                      backdropFilter: 'blur(10px)',
+                      background: 'white',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center'
@@ -652,14 +755,24 @@ const ProjectsPage: React.FC = () => {
                         width: '100%',
                         height: '100%',
                         objectFit: 'cover',
-                        borderRadius: '50%'
+                      }}
+                      onError={(e) => {
+                        // Fallback if image fails to load
+                        const target = e.target as HTMLImageElement;
+                        target.style.display = 'none';
+                        const parent = target.parentElement;
+                        if (parent) {
+                          parent.style.background = 'rgba(255,255,255,0.2)';
+                          parent.style.backdropFilter = 'blur(10px)';
+                          parent.innerHTML = '<div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;"><svg width="60" height="60" viewBox="0 0 24 24" fill="white"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg></div>';
+                        }
                       }}
                     />
                   </Box>
                 </Box>
               </Grid>
-            )}
-          </Grid>
+            </Grid>
+          )}
         </Container>
       </Box>
 
