@@ -957,18 +957,10 @@ const HomePage: React.FC = () => {
                           justifyContent: 'center'
                         }}
                       >
-                        <Box
-                          component="img"
-                          src="/images/school-logo.tif"
-                          alt="School Logo"
-                          sx={{ 
-                            width: { xs: 60, sm: 80, md: 100, lg: 120 },
-                            height: { xs: 60, sm: 80, md: 100, lg: 120 },
-                            objectFit: 'contain',
-                            opacity: 0.3,
-                            filter: 'brightness(0) invert(1)'
-                          }} 
-                        />
+                        <ResearchIcon sx={{ 
+                          fontSize: { xs: 32, sm: 40, md: 50, lg: 60 }, 
+                          color: 'rgba(255,255,255,0.3)' 
+                        }} />
                         <Box
                           sx={{
                             position: 'absolute',
@@ -992,6 +984,7 @@ const HomePage: React.FC = () => {
                           </Typography>
                         </Box>
                       </Box>
+
                       <CardContent sx={{ flexGrow: 1, p: { xs: 1.5, sm: 2, md: 3 } }}>
                         <Typography
                           variant="h6"
@@ -1222,7 +1215,7 @@ const HomePage: React.FC = () => {
               {
                 icon: InnovationIcon,
                 title: 'Innovation Hub',
-                description: 'Modern facilities and teamwork across different fields drive new discoveries in public health.',
+                description: 'State-of-the-art facilities and interdisciplinary collaboration foster breakthrough discoveries in public health.',
                 color: '#1a7a5e'
               },
               {
@@ -1240,7 +1233,7 @@ const HomePage: React.FC = () => {
               {
                 icon: ResearchIcon,
                 title: 'Research Excellence',
-                description: 'Conducting high-quality studies that advance medical knowledge and improve health outcomes worldwide.',
+                description: 'Leading groundbreaking studies that shape health policy.',
                 color: '#1a7a5e'
               },
               {
@@ -1249,6 +1242,8 @@ const HomePage: React.FC = () => {
                 description: 'Using advanced analytics and evidence-based approaches to solve complex health challenges effectively.',
                 color: '#2a9d7f'
               }
+    
+              
             ].slice(0, isMobile ? 4 : 6).map((feature, index) => (
               <Grid item xs={12} sm={6} lg={4} key={index}>
                 <motion.div
