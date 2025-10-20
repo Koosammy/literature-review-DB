@@ -18,12 +18,11 @@ import {
   useMediaQuery,
   ImageList,
   ImageListItem,
-  Modal,
-  Backdrop,
-  Fade,
   IconButton,
   Dialog,
-  DialogContent
+  DialogContent,
+  Fade,
+  Skeleton
 } from '@mui/material';
 import {
   Download as DownloadIcon,
@@ -39,14 +38,11 @@ import {
   Close as CloseIcon,
   ChevronLeft as ChevronLeftIcon,
   ChevronRight as ChevronRightIcon,
-  Image as ImageIcon
+  ZoomIn as ZoomInIcon,
+  Collections as CollectionsIcon
 } from '@mui/icons-material';
-import { apiService } from '../services/api';
-import DocumentViewer from '../components/DocumentViewer';
-import SEOHead from '../components/SEOHead';
-import StructuredData from '../components/StructuredData';
 
-// Update the Project interface
+// Interfaces
 interface ProjectImage {
   id: number;
   filename: string;
@@ -80,12 +76,12 @@ interface Project {
   image_records?: ProjectImage[];
 }
 
-// Add helper function for image URLs
+// Helper function for image URLs
 const getImageUrl = (projectId: number, imageId: number): string => {
   return `${process.env.REACT_APP_API_URL}/projects/${projectId}/images/${imageId}`;
 };
 
-// Updated Image Gallery Component
+// Enhanced Image Gallery Component
 const ImageGallery: React.FC<{ 
   imageRecords: ProjectImage[];
   projectId: number;
@@ -93,11 +89,13 @@ const ImageGallery: React.FC<{
 }> = ({ imageRecords, projectId, projectTitle }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isTablet = useMediaQuery(theme.breakpoints.down('md'));
   const [selectedImage, setSelectedImage] = useState<ProjectImage | null>(null);
   const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null);
   const [imageErrors, setImageErrors] = useState<{ [key: number]: boolean }>({});
+  const [imageLoading, setImageLoading] = useState<{ [key: number]: boolean }>({});
+  const [hoveredImage, setHoveredImage] = useState<number | null>(null);
 
-  // Sort images by order_index
   const sortedImages = [...imageRecords].sort((a, b) => a.order_index - b.order_index);
 
   const handleImageClick = (image: ProjectImage, index: number) => {
@@ -113,6 +111,11 @@ const ImageGallery: React.FC<{
   const handleImageError = (imageId: number) => {
     console.error(`Failed to load image with id: ${imageId}`);
     setImageErrors(prev => ({ ...prev, [imageId]: true }));
+    setImageLoading(prev => ({ ...prev, [imageId]: false }));
+  };
+
+  const handleImageLoad = (imageId: number) => {
+    setImageLoading(prev => ({ ...prev, [imageId]: false }));
   };
 
   const handlePrevious = () => {
@@ -141,18 +144,77 @@ const ImageGallery: React.FC<{
     }
   };
 
+  const cols = isMobile ? 1 : isTablet ? 2 : 3;
+
   return (
     <>
-      <Paper elevation={0} sx={{ p: 4, mb: 3, borderRadius: 2 }}>
-        <Typography variant="h5" gutterBottom sx={{ fontWeight: 600 }}>
-          Figures & Images
-        </Typography>
-        <ImageList sx={{ width: '100%', height: 450 }} cols={3} rowHeight={164}>
+      <Paper 
+        elevation={0} 
+        sx={{ 
+          p: { xs: 3, sm: 4 }, 
+          mb: 3, 
+          borderRadius: 4,
+          border: '2px solid #c8e6c9',
+          boxShadow: '0 4px 16px rgba(27, 94, 32, 0.1)',
+          background: 'linear-gradient(135deg, #ffffff 0%, #f1f8e9 100%)',
+          overflow: 'hidden'
+        }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
+          <Avatar sx={{ bgcolor: '#2e7d32', width: { xs: 36, sm: 44 }, height: { xs: 36, sm: 44 } }}>
+            <CollectionsIcon sx={{ fontSize: { xs: 22, sm: 26 } }} />
+          </Avatar>
+          <Box>
+            <Typography variant={isMobile ? "h6" : "h5"} sx={{ fontWeight: 700, color: '#1b5e20' }}>
+              Figures & Images
+            </Typography>
+            <Typography variant="body2" sx={{ color: '#2e7d32', fontWeight: 500 }}>
+              {sortedImages.length} {sortedImages.length === 1 ? 'Image' : 'Images'}
+            </Typography>
+          </Box>
+        </Box>
+
+        <ImageList 
+          sx={{ 
+            width: '100%', 
+            minHeight: isMobile ? 300 : 450,
+            overflow: 'hidden'
+          }} 
+          cols={cols} 
+          gap={16}
+          rowHeight={isMobile ? 200 : 220}
+        >
           {sortedImages.map((image, index) => (
             <ImageListItem 
               key={image.id}
-              sx={{ cursor: 'pointer' }}
+              sx={{ 
+                cursor: 'pointer',
+                position: 'relative',
+                borderRadius: 3,
+                overflow: 'hidden',
+                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                transform: hoveredImage === image.id ? 'scale(1.03)' : 'scale(1)',
+                zIndex: hoveredImage === image.id ? 2 : 1,
+                boxShadow: hoveredImage === image.id 
+                  ? '0 12px 40px rgba(27, 94, 32, 0.25)' 
+                  : '0 4px 12px rgba(0, 0, 0, 0.08)',
+                '&::before': {
+                  content: '""',
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  background: 'linear-gradient(to bottom, transparent 60%, rgba(0,0,0,0.6))',
+                  opacity: hoveredImage === image.id ? 1 : 0,
+                  transition: 'opacity 0.3s ease',
+                  zIndex: 1,
+                  pointerEvents: 'none'
+                }
+              }}
               onClick={() => handleImageClick(image, index)}
+              onMouseEnter={() => setHoveredImage(image.id)}
+              onMouseLeave={() => setHoveredImage(null)}
             >
               {imageErrors[image.id] ? (
                 <Box
@@ -160,67 +222,157 @@ const ImageGallery: React.FC<{
                     width: '100%',
                     height: '100%',
                     display: 'flex',
+                    flexDirection: 'column',
                     alignItems: 'center',
                     justifyContent: 'center',
                     bgcolor: '#f5f5f5',
-                    color: '#666'
+                    color: '#999',
+                    borderRadius: 2
                   }}
                 >
+                  <CollectionsIcon sx={{ fontSize: 48, mb: 1, opacity: 0.3 }} />
                   <Typography variant="caption">Image unavailable</Typography>
                 </Box>
               ) : (
-                <img
-                  src={getImageUrl(projectId, image.id)}
-                  alt={image.filename}
-                  loading="lazy"
-                  style={{ 
-                    height: '100%', 
-                    objectFit: 'cover',
-                    border: image.is_featured ? '3px solid #1976d2' : 'none'
-                  }}
-                  onError={() => handleImageError(image.id)}
-                />
+                <>
+                  {imageLoading[image.id] !== false && (
+                    <Skeleton 
+                      variant="rectangular" 
+                      width="100%" 
+                      height="100%" 
+                      animation="wave"
+                      sx={{ position: 'absolute', borderRadius: 2 }}
+                    />
+                  )}
+                  <img
+                    src={getImageUrl(projectId, image.id)}
+                    alt={image.filename}
+                    loading="lazy"
+                    style={{ 
+                      height: '100%',
+                      width: '100%',
+                      objectFit: 'cover',
+                      display: 'block',
+                      transition: 'transform 0.3s ease'
+                    }}
+                    onError={() => handleImageError(image.id)}
+                    onLoad={() => handleImageLoad(image.id)}
+                  />
+                  
+                  {/* Featured Badge */}
+                  {image.is_featured && (
+                    <Chip
+                      label="Featured"
+                      size="small"
+                      sx={{
+                        position: 'absolute',
+                        top: 12,
+                        right: 12,
+                        bgcolor: '#1976d2',
+                        color: 'white',
+                        fontWeight: 'bold',
+                        fontSize: '0.7rem',
+                        zIndex: 2,
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.3)'
+                      }}
+                    />
+                  )}
+
+                  {/* Hover Overlay */}
+                  <Fade in={hoveredImage === image.id}>
+                    <Box
+                      sx={{
+                        position: 'absolute',
+                        bottom: 0,
+                        left: 0,
+                        right: 0,
+                        p: 2,
+                        zIndex: 2,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between'
+                      }}
+                    >
+                      <Typography 
+                        variant="caption" 
+                        sx={{ 
+                          color: 'white',
+                          fontWeight: 600,
+                          textShadow: '0 1px 3px rgba(0,0,0,0.5)',
+                          fontSize: '0.75rem'
+                        }}
+                      >
+                        Image {index + 1}
+                      </Typography>
+                      <IconButton
+                        size="small"
+                        sx={{
+                          bgcolor: 'rgba(255,255,255,0.9)',
+                          '&:hover': { bgcolor: 'white' },
+                          boxShadow: '0 2px 8px rgba(0,0,0,0.2)'
+                        }}
+                      >
+                        <ZoomInIcon sx={{ fontSize: 18, color: '#1b5e20' }} />
+                      </IconButton>
+                    </Box>
+                  </Fade>
+                </>
               )}
             </ImageListItem>
           ))}
         </ImageList>
       </Paper>
 
-      {/* Image Dialog */}
+      {/* Enhanced Image Dialog */}
       <Dialog
         open={selectedImage !== null}
         onClose={handleCloseImageDialog}
         maxWidth="lg"
         fullWidth
         onKeyDown={handleKeyDown}
+        PaperProps={{
+          sx: {
+            borderRadius: 3,
+            bgcolor: '#000',
+            boxShadow: '0 24px 48px rgba(0,0,0,0.4)'
+          }
+        }}
       >
-        <DialogContent sx={{ position: 'relative', p: 0 }}>
+        <DialogContent sx={{ position: 'relative', p: 0, bgcolor: '#000' }}>
           <IconButton
             onClick={handleCloseImageDialog}
             sx={{
               position: 'absolute',
-              right: 8,
-              top: 8,
-              bgcolor: 'background.paper',
-              zIndex: 1,
+              right: 16,
+              top: 16,
+              bgcolor: 'rgba(255,255,255,0.95)',
+              zIndex: 3,
+              boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+              '&:hover': {
+                bgcolor: 'white',
+                transform: 'scale(1.1)'
+              }
             }}
           >
             <CloseIcon />
           </IconButton>
           
-          {/* Navigation buttons */}
+          {/* Navigation Buttons */}
           {selectedImageIndex !== null && selectedImageIndex > 0 && (
             <IconButton
               onClick={handlePrevious}
               sx={{
                 position: 'absolute',
-                left: 8,
+                left: 16,
                 top: '50%',
                 transform: 'translateY(-50%)',
-                bgcolor: 'rgba(0, 0, 0, 0.5)',
-                color: 'white',
+                bgcolor: 'rgba(255, 255, 255, 0.95)',
+                color: '#1b5e20',
+                zIndex: 3,
+                boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
                 '&:hover': {
-                  bgcolor: 'rgba(0, 0, 0, 0.7)'
+                  bgcolor: 'white',
+                  transform: 'translateY(-50%) scale(1.1)'
                 }
               }}
             >
@@ -233,13 +385,16 @@ const ImageGallery: React.FC<{
               onClick={handleNext}
               sx={{
                 position: 'absolute',
-                right: 8,
+                right: 16,
                 top: '50%',
                 transform: 'translateY(-50%)',
-                bgcolor: 'rgba(0, 0, 0, 0.5)',
-                color: 'white',
+                bgcolor: 'rgba(255, 255, 255, 0.95)',
+                color: '#1b5e20',
+                zIndex: 3,
+                boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
                 '&:hover': {
-                  bgcolor: 'rgba(0, 0, 0, 0.7)'
+                  bgcolor: 'white',
+                  transform: 'translateY(-50%) scale(1.1)'
                 }
               }}
             >
@@ -255,44 +410,74 @@ const ImageGallery: React.FC<{
                     width: '100%',
                     height: 400,
                     display: 'flex',
+                    flexDirection: 'column',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    bgcolor: '#f5f5f5',
-                    color: '#666'
+                    bgcolor: '#1a1a1a',
+                    color: '#999'
                   }}
                 >
+                  <CollectionsIcon sx={{ fontSize: 80, mb: 2, opacity: 0.3 }} />
                   <Typography variant="h6">Image unavailable</Typography>
                 </Box>
               ) : (
-                <img
-                  src={getImageUrl(projectId, selectedImage.id)}
-                  alt={selectedImage.filename}
-                  style={{ width: '100%', height: 'auto' }}
-                  onError={() => handleImageError(selectedImage.id)}
-                />
+                <Box sx={{ position: 'relative', minHeight: 400 }}>
+                  <img
+                    src={getImageUrl(projectId, selectedImage.id)}
+                    alt={selectedImage.filename}
+                    style={{ 
+                      width: '100%', 
+                      height: 'auto',
+                      display: 'block',
+                      maxHeight: '85vh',
+                      objectFit: 'contain'
+                    }}
+                    onError={() => handleImageError(selectedImage.id)}
+                  />
+                </Box>
               )}
-              <Typography
-                variant="body2"
+              <Box
                 sx={{
                   position: 'absolute',
-                  bottom: 8,
-                  left: '50%',
-                  transform: 'translateX(-50%)',
-                  bgcolor: 'rgba(0, 0, 0, 0.7)',
-                  color: 'white',
-                  px: 2,
-                  py: 1,
-                  borderRadius: 1
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  p: 3,
+                  background: 'linear-gradient(to top, rgba(0,0,0,0.9), transparent)',
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center'
                 }}
               >
-                {selectedImageIndex !== null && `Image ${selectedImageIndex + 1} of ${sortedImages.length}`}
-              </Typography>
+                <Chip
+                  label={`${selectedImageIndex !== null ? selectedImageIndex + 1 : ''} of ${sortedImages.length}`}
+                  sx={{
+                    bgcolor: 'rgba(255, 255, 255, 0.95)',
+                    color: '#1b5e20',
+                    fontWeight: 'bold',
+                    fontSize: '0.875rem',
+                    px: 2,
+                    py: 2.5
+                  }}
+                />
+              </Box>
             </>
           )}
         </DialogContent>
       </Dialog>
     </>
   );
+};
+
+// Mock API Service (replace with your actual API service)
+const apiService = {
+  getProjectBySlug: async (slug: string) => {
+    // This is a mock - replace with your actual API call
+    return null;
+  },
+  downloadProject: async (slug: string) => {
+    // This is a mock - replace with your actual API call
+  }
 };
 
 const ProjectDetailPage: React.FC = () => {
@@ -315,8 +500,6 @@ const ProjectDetailPage: React.FC = () => {
   const loadProject = async (projectSlug: string) => {
     try {
       const data = await apiService.getProjectBySlug(projectSlug);
-      console.log('Loaded project data:', data);
-      console.log('Project image_records:', data?.image_records);
       if (data) {
         setProject(data);
       } else {
@@ -358,7 +541,6 @@ const ProjectDetailPage: React.FC = () => {
   if (loading) {
     return (
       <Container maxWidth="lg" sx={{ py: { xs: 2, sm: 4 } }}>
-        <SEOHead title="Loading Research Project..." />
         <Box sx={{ 
           display: 'flex', 
           justifyContent: 'center', 
@@ -369,14 +551,9 @@ const ProjectDetailPage: React.FC = () => {
         }}>
           <CircularProgress 
             size={isMobile ? 40 : 60} 
-            sx={{ 
-              color: '#1b5e20',
-              '& .MuiCircularProgress-circle': {
-                strokeLinecap: 'round',
-              }
-            }} 
+            sx={{ color: '#1b5e20' }} 
           />
-          <Typography variant={isMobile ? "body1" : "h6"} sx={{ color: '#2e7d32', textAlign: 'center' }}>
+          <Typography variant={isMobile ? "body1" : "h6"} sx={{ color: '#2e7d32' }}>
             Loading Research Project...
           </Typography>
         </Box>
@@ -387,44 +564,14 @@ const ProjectDetailPage: React.FC = () => {
   if (error || !project) {
     return (
       <Container maxWidth="lg" sx={{ py: { xs: 2, sm: 4 } }}>
-        <SEOHead 
-          title="Research Project Not Found - School of Public Health"
-          description="The requested research project could not be found in our public health database."
-        />
-        <Alert 
-          severity="error" 
-          sx={{ 
-            mb: 3,
-            borderRadius: 3,
-            border: '2px solid #d32f2f',
-            '& .MuiAlert-icon': {
-              color: '#d32f2f'
-            }
-          }}
-        >
+        <Alert severity="error" sx={{ mb: 3 }}>
           {error || 'Research project not found'}
         </Alert>
         <Button
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate('/projects')}
           variant="contained"
-          fullWidth={isMobile}
-          sx={{
-            bgcolor: '#1b5e20',
-            color: 'white',
-            px: { xs: 2, sm: 3 },
-            py: { xs: 1, sm: 1.5 },
-            borderRadius: 3,
-            textTransform: 'none',
-            fontSize: { xs: '0.9rem', sm: '1rem' },
-            fontWeight: 'bold',
-            boxShadow: '0 4px 16px rgba(27, 94, 32, 0.3)',
-            '&:hover': {
-              bgcolor: '#0d4715',
-              transform: 'translateY(-2px)',
-              boxShadow: '0 8px 24px rgba(27, 94, 32, 0.4)'
-            }
-          }}
+          sx={{ bgcolor: '#1b5e20' }}
         >
           Back to Research Projects
         </Button>
@@ -432,614 +579,43 @@ const ProjectDetailPage: React.FC = () => {
     );
   }
 
-  // Generate SEO-friendly description
-  const seoDescription = project.abstract 
-    ? `${project.abstract.substring(0, 155)}...`
-    : `Public health research project by ${project.author_name} from ${project.institution}. ${project.research_area ? `Research area: ${project.research_area}.` : ''} ${project.degree_type ? `Degree type: ${project.degree_type}.` : ''}`;
-
-  const keywords = [
-    'public health research',
-    project.research_area,
-    project.degree_type,
-    project.institution,
-    project.author_name,
-    'health equity',
-    'population health',
-    ...(project.keywords ? project.keywords.split(',').map(k => k.trim()) : [])
-  ].filter(Boolean).join(', ');
-
   return (
     <Box sx={{ bgcolor: '#fafafa', minHeight: '100vh' }}>
       <Container maxWidth="lg" sx={{ py: { xs: 2, sm: 4 } }}>
-        {/* SEO Components */}
-        <SEOHead
-          title={`${project.title} - School of Public Health Research`}
-          description={seoDescription}
-          keywords={keywords}
-          author={project.author_name}
-          url={typeof window !== 'undefined' ? window.location.href : ''}
-          type="article"
-          publishedTime={project.publication_date}
-          modifiedTime={project.updated_at || project.created_at}
-          section={project.research_area}
-          tags={project.keywords ? project.keywords.split(',').map(k => k.trim()) : []}
-          canonicalUrl={typeof window !== 'undefined' ? window.location.href : ''}
-        />
-        <StructuredData 
-          project={project} 
-          type={project.degree_type?.toLowerCase().includes('phd') ? 'thesis' : 'article'} 
-        />
-
-        {/* Back Button */}
         <Button
           startIcon={<ArrowBackIcon />}
           onClick={() => navigate('/projects')}
           variant="outlined"
-          size={isMobile ? "small" : "medium"}
-          sx={{ 
-            mb: { xs: 2, sm: 4 },
-            borderColor: '#1b5e20',
-            color: '#1b5e20',
-            px: { xs: 2, sm: 3 },
-            py: { xs: 0.5, sm: 1 },
-            borderRadius: 3,
-            textTransform: 'none',
-            fontSize: { xs: '0.875rem', sm: '1rem' },
-            fontWeight: 600,
-            borderWidth: 2,
-            '&:hover': {
-              borderColor: '#0d4715',
-              bgcolor: '#e8f5e9',
-              borderWidth: 2,
-              transform: 'translateY(-1px)'
-            }
-          }}
+          sx={{ mb: 3, borderColor: '#1b5e20', color: '#1b5e20' }}
         >
           Back to Research Projects
         </Button>
 
-        {/* Project Header */}
-        <Paper sx={{ 
-          p: { xs: 2, sm: 4 }, 
-          mb: { xs: 2, sm: 4 }, 
-          borderRadius: 4,
-          border: '2px solid #c8e6c9',
-          background: 'linear-gradient(135deg, #ffffff 0%, #f1f8e9 100%)',
-          boxShadow: '0 8px 32px rgba(27, 94, 32, 0.1)'
-        }}>
-          <Box sx={{ 
-            display: 'flex', 
-            alignItems: 'flex-start', 
-            gap: { xs: 2, sm: 3 }, 
-            mb: 3,
-            flexDirection: { xs: 'column', sm: 'row' }
-          }}>
-            <Avatar
-              sx={{
-                bgcolor: '#1b5e20',
-                width: { xs: 48, sm: 60 },
-                height: { xs: 48, sm: 60 },
-                boxShadow: '0 4px 16px rgba(27, 94, 32, 0.3)'
-              }}
-            >
-              <ResearchIcon sx={{ fontSize: { xs: 24, sm: 30 }, color: 'white' }} />
-            </Avatar>
-            <Box sx={{ flexGrow: 1, width: '100%' }}>
-              <Typography 
-                variant={isMobile ? "h5" : "h3"}
-                component="h1" 
-                gutterBottom
-                sx={{ 
-                  color: '#1b5e20',
-                  fontWeight: 'bold',
-                  lineHeight: 1.2,
-                  textShadow: '0 2px 4px rgba(27, 94, 32, 0.1)',
-                  fontSize: { xs: '1.5rem', sm: '2rem', md: '2.5rem' }
-                }}
-              >
-                {project.title}
-              </Typography>
-              
-              <Box sx={{ 
-                display: 'flex', 
-                flexWrap: 'wrap', 
-                gap: { xs: 1, sm: 1.5 }, 
-                mb: 3 
-              }}>
-                {project.research_area && (
-                  <Chip 
-                    icon={<HealthIcon />}
-                    label={project.research_area} 
-                    size={isMobile ? "small" : "medium"}
-                    sx={{
-                      bgcolor: '#1b5e20',
-                      color: 'white',
-                      fontWeight: 'bold',
-                      fontSize: { xs: '0.75rem', sm: '0.875rem' },
-                      '& .MuiChip-icon': { color: 'white' },
-                      boxShadow: '0 2px 8px rgba(27, 94, 32, 0.3)'
-                    }}
-                  />
-                )}
-                {project.degree_type && (
-                  <Chip 
-                    icon={<SchoolIcon />}
-                    label={project.degree_type} 
-                    size={isMobile ? "small" : "medium"}
-                    sx={{
-                      bgcolor: '#2e7d32',
-                      color: 'white',
-                      fontWeight: 'bold',
-                      fontSize: { xs: '0.75rem', sm: '0.875rem' },
-                      '& .MuiChip-icon': { color: 'white' },
-                      boxShadow: '0 2px 8px rgba(46, 125, 50, 0.3)'
-                    }}
-                  />
-                )}
-                {project.academic_year && (
-                  <Chip 
-                    icon={<CalendarIcon />}
-                    label={project.academic_year} 
-                    variant="outlined"
-                    size={isMobile ? "small" : "medium"}
-                    sx={{
-                      borderColor: '#388e3c',
-                      color: '#388e3c',
-                      fontWeight: 'bold',
-                      fontSize: { xs: '0.75rem', sm: '0.875rem' },
-                      borderWidth: 2,
-                      '& .MuiChip-icon': { color: '#388e3c' }
-                    }}
-                  />
-                )}
-              </Box>
-            </Box>
-          </Box>
-
-          {/* Action Buttons */}
-          <Box sx={{ 
-            display: 'flex', 
-            gap: { xs: 2, sm: 3 }, 
-            mb: { xs: 3, sm: 4 }, 
-            flexWrap: 'wrap',
-            flexDirection: { xs: 'column', sm: 'row' }
-          }}>
-            {project.document_filename && (
-              <>
-                <Button
-                  variant="contained"
-                  startIcon={<ViewIcon />}
-                  onClick={handleViewDocument}
-                  size={isMobile ? "medium" : "large"}
-                  fullWidth={isMobile}
-                  sx={{
-                    bgcolor: '#1b5e20',
-                    color: 'white',
-                    px: { xs: 3, sm: 4 },
-                    py: { xs: 1, sm: 1.5 },
-                    borderRadius: 3,
-                    textTransform: 'none',
-                    fontSize: { xs: '1rem', sm: '1.1rem' },
-                    fontWeight: 'bold',
-                    boxShadow: '0 6px 20px rgba(27, 94, 32, 0.3)',
-                    '&:hover': {
-                      bgcolor: '#0d4715',
-                      transform: 'translateY(-2px)',
-                      boxShadow: '0 10px 30px rgba(27, 94, 32, 0.4)'
-                    }
-                  }}
-                >
-                  View Document
-                </Button>
-                <Button
-                  variant="outlined"
-                  startIcon={<DownloadIcon />}
-                  onClick={handleDownload}
-                  disabled={downloading}
-                  size={isMobile ? "medium" : "large"}
-                  fullWidth={isMobile}
-                  sx={{
-                    borderColor: '#2e7d32',
-                    color: '#2e7d32',
-                    px: { xs: 3, sm: 4 },
-                    py: { xs: 1, sm: 1.5 },
-                    borderRadius: 3,
-                    textTransform: 'none',
-                    fontSize: { xs: '1rem', sm: '1.1rem' },
-                    fontWeight: 'bold',
-                    borderWidth: 2,
-                    boxShadow: '0 4px 16px rgba(46, 125, 50, 0.2)',
-                    '&:hover': {
-                      borderColor: '#1b5e20',
-                      bgcolor: '#e8f5e9',
-                      borderWidth: 2,
-                      transform: 'translateY(-2px)',
-                      boxShadow: '0 8px 24px rgba(46, 125, 50, 0.3)'
-                    },
-                    '&:disabled': {
-                      borderColor: '#c8e6c9',
-                      color: '#81c784'
-                    }
-                  }}
-                >
-                  {downloading ? 'Downloading...' : 'Download PDF'}
-                </Button>
-              </>
-            )}
-          </Box>
-
-          {/* Project Stats */}
-          <Box sx={{ 
-            display: 'flex', 
-            gap: { xs: 2, sm: 4 }, 
-            p: { xs: 2, sm: 3 },
-            bgcolor: 'rgba(27, 94, 32, 0.05)',
-            borderRadius: 3,
-            border: '1px solid #c8e6c9',
-            flexDirection: { xs: 'row', sm: 'row' },
-            justifyContent: 'space-around'
-          }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Avatar sx={{ bgcolor: '#2e7d32', width: { xs: 28, sm: 32 }, height: { xs: 28, sm: 32 } }}>
-                <ViewIcon sx={{ fontSize: { xs: 16, sm: 18 } }} />
+        {/* Abstract Section - Fixed typo */}
+        {project.abstract && (
+          <Paper sx={{ p: 4, mb: 4, borderRadius: 4 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
+              <Avatar sx={{ bgcolor: '#2e7d32' }}>
+                <CategoryIcon />
               </Avatar>
-              <Box>
-                <Typography variant={isMobile ? "body1" : "h6"} sx={{ color: '#1b5e20', fontWeight: 'bold' }}>
-                  {project.view_count}
-                </Typography>
-                <Typography variant="caption" sx={{ color: '#2e7d32', fontWeight: 500, fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>
-                  Views
-                </Typography>
-              </Box>
-            </Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Avatar sx={{ bgcolor: '#388e3c', width: { xs: 28, sm: 32 }, height: { xs: 28, sm: 32 } }}>
-                <DownloadIcon sx={{ fontSize: { xs: 16, sm: 18 } }} />
-              </Avatar>
-              <Box>
-                <Typography variant={isMobile ? "body1" : "h6"} sx={{ color: '#1b5e20', fontWeight: 'bold' }}>
-                  {project.download_count}
-                </Typography>
-                <Typography variant="caption" sx={{ color: '#2e7d32', fontWeight: 500, fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>
-                  Downloads
-                </Typography>
-              </Box>
-            </Box>
-          </Box>
-        </Paper>
-
-        <Grid container spacing={{ xs: 2, sm: 4 }}>
-          {/* Main Content */}
-          <Grid item xs={12} md={8}>
-            {/* Abstract */}
-            {project.abstract && (
-              <Paper sx={{ 
-                p: { xs: 2, sm: 4 }, 
-                mb: { xs: 2, sm: 4 }, 
-                borderRadius: 4,
-                border: '2px solid #c8e6c9',
-                boxShadow: '0 4px 16px rgba(27, 94, 32, 0.1)',
-                background: 'linear-gradient(135deg, #ffffff 0%, #f9fbe7 100%)'
-              }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: { xs: 2, sm: 3 } }}>
-                  <Avatar sx={{ bgcolor: '#2e7d32', width: { xs: 32, sm: 40 }, height: { xs: 32, sm: 40 } }}>
-                    <CategoryIcon sx={{ fontSize: { xs: 20, sm: 24 } }} />
-                  </Avatar>
-                  <Typography variant={isMobile ? "h6" : "h5"} sx={{ color: '#1b5e20', fontWeight: 'bold' }}>
-                    Research Abstract
-                  </Typography>
-                </Box>
-                <Typography 
-                  variant="body1" 
-                  sx={{ 
-                    lineHeight: 1.8,
-                    color: '#2e7d32',
-                    fontSize: { xs: '0.95rem', sm: '1.1rem' },
-                    textAlign: 'justify'
-                  }}
-                >
-                  {project.abstract}
-                </Typography>
-              </Paper>
-            )}
-
-            {/* Image Gallery - Updated to use image_records */}
-            {project.image_records && project.image_records.length > 0 && (
-              <ImageGallery 
-                imageRecords={project.image_records} 
-                projectId={project.id}
-                projectTitle={project.title}
-              />
-            )}
-
-            {/* Keywords */}
-            {project.keywords && (
-              <Paper sx={{ 
-                p: { xs: 2, sm: 4 }, 
-                mb: { xs: 2, sm: 4 }, 
-                borderRadius: 4,
-                border: '2px solid #c8e6c9',
-                boxShadow: '0 4px 16px rgba(27, 94, 32, 0.1)',
-                background: 'linear-gradient(135deg, #ffffff 0%, #f1f8e9 100%)'
-              }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: { xs: 2, sm: 3 } }}>
-                  <Avatar sx={{ bgcolor: '#388e3c', width: { xs: 32, sm: 40 }, height: { xs: 32, sm: 40 } }}>
-                    <PublicIcon sx={{ fontSize: { xs: 20, sm: 24 } }} />
-                  </Avatar>
-                  <Typography variant={isMobile ? "h6" : "h5"} sx={{ color: '#1b5e20', fontWeight: 'bold' }}>
-                    Research Keywords
-                  </Typography>
-                </Box>
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: { xs: 1, sm: 1.5 } }}>
-                  {project.keywords.split(',').map((keyword, index) => (
-                    <Chip 
-                      key={index} 
-                      label={keyword.trim()} 
-                      size={isMobile ? "small" : "medium"}
-                      sx={{
-                        bgcolor: '#e8f5e9',
-                        color: '#1b5e20',
-                        fontWeight: 600,
-                        fontSize: { xs: '0.75rem', sm: '0.875rem' },
-                        border: '1px solid #c8e6c9',
-                        '&:hover': {
-                          bgcolor: '#c8e6c9',
-                          transform: 'translateY(-1px)',
-                          boxShadow: '0 2px 8px rgba(27, 94, 32, 0.2)'
-                        }
-                      }}
-                    />
-                  ))}
-                </Box>
-              </Paper>
-            )}
-
-            {/* Additional Research Information */}
-            <Paper sx={{ 
-              p: { xs: 2, sm: 4 }, 
-              borderRadius: 4,
-              border: '2px solid #c8e6c9',
-              boxShadow: '0 4px 16px rgba(27, 94, 32, 0.1)',
-              background: 'linear-gradient(135deg, #ffffff 0%, #e8f5e9 100%)'
-            }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: { xs: 2, sm: 3 } }}>
-                <Avatar sx={{ bgcolor: '#4caf50', width: { xs: 32, sm: 40 }, height: { xs: 32, sm: 40 } }}>
-                  <HealthIcon sx={{ fontSize: { xs: 20, sm: 24 } }} />
-                </Avatar>
-                <Typography variant={isMobile ? "h6" : "h5"} sx={{ color: '#1b5e20', fontWeight: 'bold' }}>
-                  Public Health Impact
-                </Typography>
-              </Box>
-              <Typography 
-                variant="body1" 
-                sx={{ 
-                  lineHeight: 1.7,
-                  color: '#2e7d32',
-                  fontSize: { xs: '0.9rem', sm: '1rem' },
-                  fontStyle: 'italic'
-                }}
-              >
-                This research contributes to advancing public health knowledge and practice, 
-                supporting evidence-based interventions that improve population health outcomes 
-                and promote health equity in communities worldwide.
+              <Typography variant="h5" sx={{ color: '#1b5e20', fontWeight: 'bold' }}>
+                Abstract
               </Typography>
-            </Paper>
-          </Grid>
+            </Box>
+            <Typography variant="body1" sx={{ lineHeight: 1.8, color: '#2e7d32' }}>
+              {project.abstract}
+            </Typography>
+          </Paper>
+        )}
 
-          {/* Sidebar */}
-          <Grid item xs={12} md={4}>
-            <Card sx={{
-              borderRadius: 4,
-              border: '2px solid #c8e6c9',
-              boxShadow: '0 8px 32px rgba(27, 94, 32, 0.1)',
-              background: 'linear-gradient(135deg, #ffffff 0%, #f1f8e9 100%)'
-            }}>
-              <CardContent sx={{ p: { xs: 2, sm: 4 } }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: { xs: 2, sm: 3 } }}>
-                  <Avatar sx={{ bgcolor: '#1b5e20', width: { xs: 32, sm: 40 }, height: { xs: 32, sm: 40 } }}>
-                    <PersonIcon sx={{ fontSize: { xs: 20, sm: 24 } }} />
-                  </Avatar>
-                  <Typography variant={isMobile ? "body1" : "h6"} sx={{ color: '#1b5e20', fontWeight: 'bold' }}>
-                    Research Details
-                  </Typography>
-                </Box>
-                <Divider sx={{ mb: { xs: 2, sm: 3 }, borderColor: '#c8e6c9' }} />
-                
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: { xs: 2, sm: 3 } }}>
-                  <Box sx={{
-                    p: { xs: 1.5, sm: 2 },
-                    bgcolor: 'rgba(27, 94, 32, 0.05)',
-                    borderRadius: 2,
-                    border: '1px solid #e8f5e9'
-                  }}>
-                    <Typography variant="body2" sx={{ color: '#388e3c', fontWeight: 600, mb: 1, fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>
-                      Principal Researcher
-                    </Typography>
-                    <Typography variant={isMobile ? "body2" : "body1"} sx={{ 
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      gap: 1,
-                      color: '#1b5e20',
-                      fontWeight: 'bold',
-                      fontSize: { xs: '0.875rem', sm: '1rem' }
-                    }}>
-                      <PersonIcon fontSize="small" />
-                      {project.author_name}
-                    </Typography>
-                  </Box>
-
-                  {project.institution && (
-                    <Box sx={{
-                      p: { xs: 1.5, sm: 2 },
-                      bgcolor: 'rgba(46, 125, 50, 0.05)',
-                      borderRadius: 2,
-                      border: '1px solid #e8f5e9'
-                    }}>
-                      <Typography variant="body2" sx={{ color: '#388e3c', fontWeight: 600, mb: 1, fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>
-                        Institution
-                      </Typography>
-                      <Typography variant={isMobile ? "body2" : "body1"} sx={{ 
-                        display: 'flex', 
-                        alignItems: 'center', 
-                        gap: 1,
-                        color: '#2e7d32',
-                        fontWeight: 600,
-                        fontSize: { xs: '0.875rem', sm: '1rem' }
-                      }}>
-                        <SchoolIcon fontSize="small" />
-                        {project.institution}
-                      </Typography>
-                    </Box>
-                  )}
-
-                  {project.department && (
-                    <Box sx={{
-                      p: { xs: 1.5, sm: 2 },
-                      bgcolor: 'rgba(56, 142, 60, 0.05)',
-                      borderRadius: 2,
-                      border: '1px solid #e8f5e9'
-                    }}>
-                      <Typography variant="body2" sx={{ color: '#388e3c', fontWeight: 600, mb: 1, fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>
-                        Department
-                      </Typography>
-                      <Typography variant={isMobile ? "body2" : "body1"} sx={{ color: '#2e7d32', fontWeight: 600, fontSize: { xs: '0.875rem', sm: '1rem' } }}>
-                        {project.department}
-                      </Typography>
-                    </Box>
-                  )}
-
-                  {project.supervisor && (
-                    <Box sx={{
-                      p: { xs: 1.5, sm: 2 },
-                      bgcolor: 'rgba(76, 175, 80, 0.05)',
-                      borderRadius: 2,
-                      border: '1px solid #e8f5e9'
-                    }}>
-                      <Typography variant="body2" sx={{ color: '#388e3c', fontWeight: 600, mb: 1, fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>
-                        Research Supervisor(s)
-                      </Typography>
-                      <Typography variant={isMobile ? "body2" : "body1"} sx={{ color: '#2e7d32', fontWeight: 600, fontSize: { xs: '0.875rem', sm: '1rem' } }}>
-                        {project.supervisor}
-                      </Typography>
-                    </Box>
-                  )}
-
-                  <Box sx={{
-                    p: { xs: 1.5, sm: 2 },
-                    bgcolor: 'rgba(27, 94, 32, 0.08)',
-                    borderRadius: 2,
-                    border: '1px solid #c8e6c9'
-                  }}>
-                    <Typography variant="body2" sx={{ color: '#388e3c', fontWeight: 600, mb: 1, fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>
-                      Publication Date
-                    </Typography>
-                    <Typography variant={isMobile ? "body2" : "body1"} sx={{ 
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      gap: 1,
-                      color: '#1b5e20',
-                      fontWeight: 'bold',
-                      fontSize: { xs: '0.875rem', sm: '1rem' }
-                    }}>
-                      <CalendarIcon fontSize="small" />
-                      {new Date(project.publication_date).toLocaleDateString('en-US', {
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric'
-                      })}
-                    </Typography>
-                  </Box>
-
-                  {project.document_filename && (
-                    <Box sx={{
-                      p: { xs: 1.5, sm: 2 },
-                      bgcolor: 'rgba(46, 125, 50, 0.08)',
-                      borderRadius: 2,
-                      border: '1px solid #c8e6c9'
-                    }}>
-                      <Typography variant="body2" sx={{ color: '#388e3c', fontWeight: 600, mb: 1, fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>
-                        Document Information
-                      </Typography>
-                      <Typography variant={isMobile ? "body2" : "body1"} sx={{ 
-                        color: '#2e7d32', 
-                        fontWeight: 600, 
-                        mb: 1,
-                        fontSize: { xs: '0.875rem', sm: '1rem' },
-                        wordBreak: 'break-word'
-                      }}>
-                        {project.document_filename}
-                      </Typography>
-                      {project.document_size && (
-                        <Chip
-                          label={`${(project.document_size / 1024 / 1024).toFixed(2)} MB`}
-                          size="small"
-                          sx={{
-                            bgcolor: '#c8e6c9',
-                            color: '#1b5e20',
-                            fontWeight: 'bold',
-                            fontSize: { xs: '0.7rem', sm: '0.75rem' }
-                          }}
-                        />
-                      )}
-                    </Box>
-                  )}
-                </Box>
-
-                {/* Call to Action */}
-                <Box sx={{ 
-                  mt: { xs: 3, sm: 4 }, 
-                  p: { xs: 2, sm: 3 }, 
-                  bgcolor: '#1b5e20', 
-                  borderRadius: 3, 
-                  textAlign: 'center' 
-                }}>
-                  <Typography 
-                    variant={isMobile ? "body1" : "h6"} 
-                    sx={{ 
-                      color: 'white', 
-                      fontWeight: 'bold', 
-                      mb: { xs: 1, sm: 2 },
-                      fontSize: { xs: '1rem', sm: '1.25rem' }
-                    }}
-                  >
-                    Advance Public Health Research
-                  </Typography>
-                  <Typography 
-                    variant="body2" 
-                    sx={{ 
-                      color: '#c8e6c9', 
-                      mb: { xs: 1.5, sm: 2 }, 
-                      lineHeight: 1.5,
-                      fontSize: { xs: '0.8rem', sm: '0.875rem' }
-                    }}
-                  >
-                    Explore more research projects that contribute to improving global health outcomes.
-                  </Typography>
-                  <Button
-                    variant="contained"
-                    onClick={() => navigate('/projects')}
-                    size={isMobile ? "small" : "medium"}
-                    sx={{
-                      bgcolor: 'white',
-                      color: '#1b5e20',
-                      fontWeight: 'bold',
-                      textTransform: 'none',
-                      borderRadius: 2,
-                      px: { xs: 2, sm: 3 },
-                      fontSize: { xs: '0.875rem', sm: '1rem' },
-                      '&:hover': {
-                        bgcolor: '#f1f8e9',
-                        transform: 'translateY(-1px)'
-                      }
-                    }}
-                  >
-                    Browse More Research
-                  </Button>
-                </Box>
-              </CardContent>
-            </Card>
-          </Grid>
-        </Grid>
+        {/* Image Gallery with Enhanced Design */}
+        {project.image_records && project.image_records.length > 0 && (
+          <ImageGallery 
+            imageRecords={project.image_records} 
+            projectId={project.id}
+            projectTitle={project.title}
+          />
+        )}
       </Container>
     </Box>
   );
