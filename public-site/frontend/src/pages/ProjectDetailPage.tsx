@@ -916,7 +916,7 @@ const ProjectDetailPage: React.FC = () => {
                       border: '1px solid #e8f5e9'
                     }}>
                       <Typography variant="body2" sx={{ color: '#388e3c', fontWeight: 600, mb: 1, fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>
-                        Research Supervisor(S)
+                        Research Supervisor(s)
                       </Typography>
                       <Typography variant={isMobile ? "body2" : "body1"} sx={{ color: '#2e7d32', fontWeight: 600, fontSize: { xs: '0.875rem', sm: '1rem' } }}>
                         {project.supervisor}
