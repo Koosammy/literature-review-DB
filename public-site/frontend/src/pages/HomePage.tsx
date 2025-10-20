@@ -3,81 +3,407 @@ import {
   Box,
   Container,
   Typography,
-  TextField,
-  Button,
   Grid,
   Card,
   CardContent,
   CardActions,
+  Button,
   Chip,
-  InputAdornment,
+  Pagination,
+  TextField,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
   Paper,
+  InputAdornment,
+  CircularProgress,
+  Breadcrumbs,
+  Link,
   Avatar,
   Fade,
-  Slide,
   IconButton,
+  Drawer,
   useTheme,
   useMediaQuery,
+  Collapse,
+  SwipeableDrawer,
   Skeleton,
-  Divider,
-  Zoom,
-  Grow
+  Zoom
 } from '@mui/material';
 import {
   Search as SearchIcon,
-  School as SchoolIcon,
-  LocalHospital as HealthIcon,
-  People as PeopleIcon,
-  TrendingUp as TrendingIcon,
-  ArrowForward as ArrowIcon,
   Visibility as ViewIcon,
   Download as DownloadIcon,
-  Public as PublicIcon,
+  ArrowForward as ArrowIcon,
+  FilterList as FilterIcon,
+  LocalHospital as HealthIcon,
   Science as ResearchIcon,
-  EmojiObjects as InnovationIcon,
-  Favorite as HeartIcon,
-  Groups as CommunityIcon,
+  School as SchoolIcon,
+  Public as PublicIcon,
+  Person as PersonIcon,
+  CalendarToday as CalendarIcon,
+  Close as CloseIcon,
+  ExpandMore as ExpandMoreIcon,
+  ExpandLess as ExpandLessIcon,
   TouchApp as TouchIcon,
-  Assessment as AssessmentIcon
+  Tune as TuneIcon
 } from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { apiService } from '../services/api';
-import { ProjectSummary, SiteStats } from '../types';
+import { ProjectSummary, SearchFilters, SearchResponse } from '../types';
 import SEOHead from '../components/SEOHead';
-import { motion } from 'framer-motion';
 
-// Animation variants
-const fadeInUp = {
-  initial: { opacity: 0, y: 60 },
-  animate: { opacity: 1, y: 0 },
-  transition: { duration: 0.6 }
+// FilterForm Component - Outside of ProjectsPage
+const FilterForm: React.FC<{
+  filters: SearchFilters;
+  setFilters: React.Dispatch<React.SetStateAction<SearchFilters>>;
+  handleSearch: () => void;
+  clearFilters: () => void;
+  researchAreas: string[];
+  institutions: string[];
+  degreeTypes: string[];
+  academicYears: string[];
+  isMobile: boolean;
+  isTablet: boolean;
+  isExtraSmall: boolean;
+}> = ({ 
+  filters, 
+  setFilters, 
+  handleSearch, 
+  clearFilters, 
+  researchAreas, 
+  institutions, 
+  degreeTypes, 
+  academicYears,
+  isMobile,
+  isTablet,
+  isExtraSmall
+}) => {
+  const [expandedSections, setExpandedSections] = useState<{ [key: string]: boolean }>({
+    advanced: !isMobile
+});
+  
+  const toggleSection = (section: string) => {
+    setExpandedSections(prev => ({
+      ...prev,
+      [section]: !prev[section]
+    }));
+  };
+
+  return (
+    <Box>
+      <Grid container spacing={{ xs: 1, sm: 1.5, md: 2 }}>
+        {/* Search Query */}
+        <Grid item xs={12}>
+          <TextField
+            fullWidth
+            label="Search Research Projects"
+            placeholder={
+              isExtraSmall 
+                ? "Search..." 
+                : isMobile 
+                  ? "Keywords, author..." 
+                  : "Keywords, author, health topics..."
+            }
+            value={filters.query}
+            onChange={(e) => setFilters({ ...filters, query: e.target.value })}
+            onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+            size={isExtraSmall ? "small" : isMobile ? "medium" : "medium"}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon sx={{ 
+                    color: '#2e7d32',
+                    fontSize: { xs: 18, sm: 20, md: 24 }
+                  }} />
+                </InputAdornment>
+              )
+            }}
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                borderRadius: { xs: 2, sm: 3 },
+                '& fieldset': { 
+                  borderColor: '#c8e6c9', 
+                  borderWidth: { xs: 1, sm: 1.5, md: 2 }
+                },
+                '&:hover fieldset': { borderColor: '#2e7d32' },
+                '&.Mui-focused fieldset': { borderColor: '#1b5e20' }
+              },
+              '& .MuiInputLabel-root': { 
+                color: '#2e7d32',
+                fontSize: { xs: '0.8rem', sm: '0.875rem', md: '1rem' }
+              },
+              '& .MuiInputLabel-root.Mui-focused': { color: '#1b5e20' }
+            }}
+          />
+        </Grid>
+
+        {/* Research Area - Always visible */}
+        <Grid item xs={12}>
+          <FormControl fullWidth size={isExtraSmall ? "small" : isMobile ? "medium" : "medium"}>
+            <InputLabel sx={{ 
+              color: '#2e7d32', 
+              '&.Mui-focused': { color: '#1b5e20' },
+              fontSize: { xs: '0.8rem', sm: '0.875rem', md: '1rem' }
+            }}>
+              Public Health Area
+            </InputLabel>
+            <Select
+              value={filters.research_area}
+              label="Public Health Area"
+              onChange={(e) => setFilters({ ...filters, research_area: e.target.value })}
+              sx={{
+                borderRadius: { xs: 2, sm: 3 },
+                '& .MuiOutlinedInput-notchedOutline': { 
+                  borderColor: '#c8e6c9', 
+                  borderWidth: { xs: 1, sm: 1.5, md: 2 }
+                },
+                '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d32' },
+                '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#1b5e20' }
+              }}
+            >
+              <MenuItem value="">All Health Areas</MenuItem>
+              {researchAreas.map((area) => (
+                <MenuItem key={area} value={area}>{area}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </Grid>
+
+        {/* Advanced Filters Toggle for Mobile */}
+        {isMobile && (
+          <Grid item xs={12}>
+            <Button
+              fullWidth
+              onClick={() => toggleSection('advanced')}
+              endIcon={expandedSections.advanced ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+              sx={{
+                justifyContent: 'space-between',
+                color: '#2e7d32',
+                textTransform: 'none',
+                fontSize: { xs: '0.8rem', sm: '0.875rem' },
+                py: { xs: 0.75, sm: 1 },
+                borderRadius: 2,
+                border: '1px solid #e8f5e9',
+                '&:hover': {
+                  bgcolor: '#f5f5f5'
+                }
+              }}
+            >
+              {isExtraSmall ? 'More Filters' : 'Advanced Filters'}
+            </Button>
+          </Grid>
+        )}
+
+        {/* Advanced Filters */}
+        <Grid item xs={12}>
+          <Collapse in={expandedSections.advanced || !isMobile}>
+            <Grid container spacing={{ xs: 1, sm: 1.5, md: 2 }}>
+              {/* Degree Type */}
+              <Grid item xs={12} sm={6} md={4}>
+                <FormControl fullWidth size={isExtraSmall ? "small" : isMobile ? "medium" : "medium"}>
+                  <InputLabel sx={{ 
+                    color: '#2e7d32', 
+                    '&.Mui-focused': { color: '#1b5e20' },
+                    fontSize: { xs: '0.8rem', sm: '0.875rem', md: '1rem' }
+                  }}>
+                    Degree Level
+                  </InputLabel>
+                  <Select
+                    value={filters.degree_type}
+                    label="Degree Level"
+                    onChange={(e) => setFilters({ ...filters, degree_type: e.target.value })}
+                    sx={{
+                      borderRadius: { xs: 2, sm: 3 },
+                      '& .MuiOutlinedInput-notchedOutline': { 
+                        borderColor: '#c8e6c9', 
+                        borderWidth: { xs: 1, sm: 1.5, md: 2 }
+                      },
+                      '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d32' },
+                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#1b5e20' }
+                    }}
+                  >
+                    <MenuItem value="">All Levels</MenuItem>
+                    {degreeTypes.map((type) => (
+                      <MenuItem key={type} value={type}>{type}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+
+              {/* Institution */}
+              <Grid item xs={12} sm={6} md={4}>
+                <FormControl fullWidth size={isExtraSmall ? "small" : isMobile ? "medium" : "medium"}>
+                  <InputLabel sx={{ 
+                    color: '#2e7d32', 
+                    '&.Mui-focused': { color: '#1b5e20' },
+                    fontSize: { xs: '0.8rem', sm: '0.875rem', md: '1rem' }
+                  }}>
+                    Institution
+                  </InputLabel>
+                  <Select
+                    value={filters.institution}
+                    label="Institution"
+                    onChange={(e) => setFilters({ ...filters, institution: e.target.value })}
+                    sx={{
+                      borderRadius: { xs: 2, sm: 3 },
+                      '& .MuiOutlinedInput-notchedOutline': { 
+                        borderColor: '#c8e6c9', 
+                        borderWidth: { xs: 1, sm: 1.5, md: 2 }
+                      },
+                      '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d32' },
+                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#1b5e20' }
+                    }}
+                  >
+                    <MenuItem value="">All Institutions</MenuItem>
+                    {institutions.map((institution) => (
+                      <MenuItem key={institution} value={institution}>{institution}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+
+              {/* Academic Year */}
+              <Grid item xs={12} sm={6} md={4}>
+                <FormControl fullWidth size={isExtraSmall ? "small" : isMobile ? "medium" : "medium"}>
+                  <InputLabel sx={{ 
+                    color: '#2e7d32', 
+                    '&.Mui-focused': { color: '#1b5e20' },
+                    fontSize: { xs: '0.8rem', sm: '0.875rem', md: '1rem' }
+                  }}>
+                    Academic Year
+                  </InputLabel>
+                  <Select
+                    value={filters.academic_year}
+                    label="Academic Year"
+                    onChange={(e) => setFilters({ ...filters, academic_year: e.target.value })}
+                    sx={{
+                      borderRadius: { xs: 2, sm: 3 },
+                      '& .MuiOutlinedInput-notchedOutline': { 
+                        borderColor: '#c8e6c9', 
+                        borderWidth: { xs: 1, sm: 1.5, md: 2 }
+                      },
+                      '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d32' },
+                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#1b5e20' }
+                    }}
+                  >
+                    <MenuItem value="">All Years</MenuItem>
+                    {academicYears.map((year) => (
+                      <MenuItem key={year} value={year}>{year}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+            </Grid>
+          </Collapse>
+        </Grid>
+
+        {/* Action Buttons */}
+        <Grid item xs={12}>
+          <Box sx={{ 
+            display: 'flex', 
+            gap: { xs: 1, sm: 1.5, md: 2 }, 
+            flexDirection: isMobile ? 'column' : 'row' 
+          }}>
+            <Button
+              variant="contained"
+              onClick={handleSearch}
+              startIcon={<SearchIcon />}
+              size={isExtraSmall ? "medium" : isMobile ? "large" : "large"}
+              fullWidth={isMobile}
+              sx={{
+                bgcolor: '#1b5e20',
+                color: 'white',
+                px: { xs: 2, sm: 3, md: 4 },
+                py: { xs: 1, sm: 1.25, md: 1.5 },
+                borderRadius: { xs: 2, sm: 3 },
+                textTransform: 'none',
+                fontSize: { xs: '0.875rem', sm: '1rem', md: '1.1rem' },
+                fontWeight: 'bold',
+                boxShadow: '0 4px 12px rgba(27, 94, 32, 0.3)',
+                '&:hover': {
+                  bgcolor: '#0d4715',
+                  transform: 'translateY(-1px)',
+                  boxShadow: '0 6px 20px rgba(27, 94, 32, 0.4)'
+                },
+                '&:active': {
+                  transform: 'scale(0.98)'
+                }
+              }}
+            >
+              Search
+            </Button>
+            <Button
+              variant="outlined"
+              onClick={clearFilters}
+              size={isExtraSmall ? "medium" : isMobile ? "large" : "large"}
+              fullWidth={isMobile}
+              sx={{
+                borderColor: '#2e7d32',
+                color: '#2e7d32',
+                px: { xs: 2, sm: 3, md: 4 },
+                py: { xs: 1, sm: 1.25, md: 1.5 },
+                borderRadius: { xs: 2, sm: 3 },
+                textTransform: 'none',
+                fontSize: { xs: '0.875rem', sm: '1rem', md: '1.1rem' },
+                fontWeight: 'bold',
+                borderWidth: { xs: 1, sm: 1.5, md: 2 },
+                '&:hover': {
+                  borderColor: '#1b5e20',
+                  bgcolor: '#e8f5e9',
+                  borderWidth: { xs: 1, sm: 1.5, md: 2 }
+                },
+                '&:active': {
+                  transform: 'scale(0.98)'
+                }
+              }}
+            >
+              {isExtraSmall ? 'Clear' : 'Clear Filters'}
+            </Button>
+          </Box>
+        </Grid>
+      </Grid>
+    </Box>
+  );
 };
 
-const staggerContainer = {
-  animate: {
-    transition: {
-      staggerChildren: 0.1
-    }
-  }
-};
-
-const HomePage: React.FC = () => {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [featuredProjects, setFeaturedProjects] = useState<ProjectSummary[]>([]);
-  const [stats, setStats] = useState<SiteStats | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [touchStartY, setTouchStartY] = useState<number | null>(null);
+// Main ProjectsPage Component
+const ProjectsPage: React.FC = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const isTablet = useMediaQuery(theme.breakpoints.down('md'));
   const isExtraSmall = useMediaQuery(theme.breakpoints.down(400));
+  
+  const [searchResponse, setSearchResponse] = useState<SearchResponse>({
+    projects: [],
+    total: 0,
+    page: 1,
+    per_page: 12,
+    total_pages: 0,
+    filters: {}
+  });
+  const [loading, setLoading] = useState(true);
+  const [researchAreas, setResearchAreas] = useState<string[]>([]);
+  const [institutions, setInstitutions] = useState<string[]>([]);
+  const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
+  const [touchStartY, setTouchStartY] = useState<number | null>(null);
+  
+  // Form state
+  const [filters, setFilters] = useState<SearchFilters>({
+    query: searchParams.get('search') || '',
+    research_area: searchParams.get('research_area') || '',
+    degree_type: searchParams.get('degree_type') || '',
+    institution: searchParams.get('institution') || '',
+    academic_year: searchParams.get('academic_year') || ''
+  });
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  const degreeTypes = ["Bachelor's", "Master's", "PhD", "Diploma", "Certificate"];
+  const academicYears = ["2024-2025", "2023-2024", "2022-2023", "2021-2022", "2020-2021"];
 
-  // Add touch gesture handling for better mobile experience
+  // Touch gesture handling
   const handleTouchStart = (e: React.TouchEvent) => {
     setTouchStartY(e.touches[0].clientY);
   };
@@ -88,86 +414,90 @@ const HomePage: React.FC = () => {
     const touchEndY = e.changedTouches[0].clientY;
     const diff = touchStartY - touchEndY;
     
-    // If swipe up is detected and we're at the top, show a subtle hint
-    if (diff > 50 && window.scrollY < 100) {
-      // Could add a subtle animation or hint here
+    // Pull to refresh gesture
+    if (diff < -100 && window.scrollY === 0) {
+      searchProjects(1);
     }
     
     setTouchStartY(null);
   };
-
   useEffect(() => {
-    // Add homepage structured data
-    const homepageSchema = {
-      "@context": "https://schema.org",
-      "@type": "EducationalOrganization",
-      "name": "School of Public Health",
-      "url": window.location.origin,
-      "description": "Leading institution in public health education, research, and community engagement. Advancing health equity and improving population health outcomes worldwide.",
-      "potentialAction": {
-        "@type": "SearchAction",
-        "target": {
-          "@type": "EntryPoint",
-          "urlTemplate": `${window.location.origin}/projects?search={search_term_string}`
-        },
-        "query-input": "required name=search_term_string"
-      },
-      "publisher": {
-        "@type": "Organization",
-        "name": "School of Public Health",
-        "url": window.location.origin
-      }
-    };
-
-    const script = document.createElement('script');
-    script.type = 'application/ld+json';
-    script.textContent = JSON.stringify(homepageSchema);
-    document.head.appendChild(script);
-
-    return () => {
-      const scriptToRemove = document.querySelector('script[type="application/ld+json"]');
-      if (scriptToRemove) {
-        scriptToRemove.remove();
-      }
-    };
+    loadFilterOptions();
   }, []);
 
-  const loadData = async () => {
+  useEffect(() => {
+    const page = parseInt(searchParams.get('page') || '1');
+    searchProjects(page);
+  }, [searchParams]);
+
+  const loadFilterOptions = async () => {
     try {
-      const [projectsData, statsData] = await Promise.all([
-        apiService.getFeaturedProjects(),
-        apiService.getSiteStats()
+      const [areasData, institutionsData] = await Promise.all([
+        apiService.getResearchAreas(),
+        apiService.getInstitutions()
       ]);
-      
-      setFeaturedProjects(projectsData);
-      setStats(statsData);
+      setResearchAreas(areasData);
+      setInstitutions(institutionsData);
     } catch (error) {
-      console.error('Failed to load data:', error);
-      setFeaturedProjects([]);
-      setStats({
-        total_projects: 0,
-        total_institutions: 0,
-        total_research_areas: 0,
-        total_downloads: 0
-      });
+      console.error('Failed to load filter options:', error);
+    }
+  };
+
+  const searchProjects = async (page: number = 1) => {
+    setLoading(true);
+    try {
+      const currentFilters = {
+        query: searchParams.get('search') || '',
+        research_area: searchParams.get('research_area') || '',
+        degree_type: searchParams.get('degree_type') || '',
+        institution: searchParams.get('institution') || '',
+        academic_year: searchParams.get('academic_year') || ''
+      };
+      
+      const response = await apiService.searchProjects(currentFilters, page);
+      setSearchResponse(response);
+    } catch (error) {
+      console.error('Failed to search projects:', error);
     } finally {
       setLoading(false);
     }
   };
 
   const handleSearch = () => {
-    if (searchQuery.trim()) {
-      navigate(`/projects?search=${encodeURIComponent(searchQuery)}`);
-    } else {
-      navigate('/projects');
-    }
+    const params = new URLSearchParams();
+    
+    if (filters.query) params.set('search', filters.query);
+    if (filters.research_area) params.set('research_area', filters.research_area);
+    if (filters.degree_type) params.set('degree_type', filters.degree_type);
+    if (filters.institution) params.set('institution', filters.institution);
+    if (filters.academic_year) params.set('academic_year', filters.academic_year);
+    
+    params.set('page', '1');
+    setSearchParams(params);
+    setMobileFilterOpen(false);
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleSearch();
-    }
+  const handlePageChange = (event: React.ChangeEvent<unknown>, page: number) => {
+    const params = new URLSearchParams(searchParams);
+    params.set('page', page.toString());
+    setSearchParams(params);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+
+  const clearFilters = () => {
+    setFilters({
+      query: '',
+      research_area: '',
+      degree_type: '',
+      institution: '',
+      academic_year: ''
+    });
+    setSearchParams(new URLSearchParams());
+    setMobileFilterOpen(false);
+  };
+
+  // Get search query for dynamic SEO
+  const searchQuery = searchParams.get('search');
 
   return (
     <Box 
@@ -175,1157 +505,942 @@ const HomePage: React.FC = () => {
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >
-      <SEOHead 
-        title="School of Public Health - Advancing Health Equity and Population Health"
-        description="Leading institution in public health education, research, and community engagement. Discover our programs, research initiatives, and commitment to improving global health outcomes."
-        keywords="public health, health equity, population health, epidemiology, health policy, global health, community health, public health education, health research"
-        type="website"
-      />
-      
-      {/* Modern Hero Section - Mobile Optimized */}
-      <Box
-        sx={{
-          position: 'relative',
-          minHeight: { xs: 'calc(100vh - 60px)', sm: '100vh', md: '100vh' },
-          display: 'flex',
-          alignItems: 'center',
-          overflow: 'hidden',
-          background: 'linear-gradient(135deg, #0d4715 100%, #1a7a5e 50%, #2a9d7f 100%)',
-          pb: { xs: isMobile ? 12 : 8, md: 0 }
-        }}
-      >
-        {/* Animated Background Pattern */}
-        <Box
-          sx={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            opacity: 0.1,
-            backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.4'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
-          }}
+      {/* SEO Head */}
+      {searchQuery ? (
+        <SEOHead 
+          title={`Public Health Research: "${searchQuery}" - School of Public Health`}
+          description={`Discover public health research projects related to "${searchQuery}". Explore evidence-based studies, theses, and dissertations advancing health equity and population health.`}
+          keywords={`${searchQuery}, public health research, health equity, population health, epidemiology, health policy`}
+          url={typeof window !== 'undefined' ? window.location.href : ''}
         />
-        
-        <Container maxWidth="lg" sx={{ 
-          position: 'relative', 
-          zIndex: 2, 
-          px: { xs: 1.5, sm: 2, md: 3 },
-          py: { xs: 2, sm: 0 }
-        }}>
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8 }}
+      ) : (
+        <SEOHead 
+          title="Public Health Research Database - School of Public Health"
+          description="Explore comprehensive public health research projects, theses, and dissertations. Discover evidence-based studies advancing health equity, population health, and global health outcomes."
+          keywords="public health research, health equity, population health, epidemiology, global health, community health, health policy, evidence-based practice"
+          url={typeof window !== 'undefined' ? window.location.href : ''}
+        />
+      )}
+
+      {/* Header - REDESIGNED FOR MOBILE */}
+      <Box sx={{ 
+        background: 'linear-gradient(135deg, #0d4715 0%, #1b5e20 50%, #2e7d32 100%)',
+        color: 'white', 
+        py: { xs: 3, sm: 3, md: 4, lg: 6 },
+        position: 'relative',
+        overflow: 'hidden',
+        '&::before': {
+          content: '""',
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'radial-gradient(circle at 70% 30%, rgba(255,255,255,0.1) 0%, transparent 50%)',
+          zIndex: 1
+        }
+      }}>
+        <Container maxWidth="lg" sx={{ position: 'relative', zIndex: 2 }}>
+          <Breadcrumbs 
+            sx={{ 
+              mb: { xs: 1.5, sm: 2 }, 
+              '& .MuiBreadcrumbs-separator': { color: '#c8e6c9' },
+              '& a, & p': { 
+                color: '#e8f5e9', 
+                fontSize: { xs: '0.7rem', sm: '0.8rem', md: '0.875rem', lg: '1rem' } 
+              }
+            }}
           >
-            <Grid container spacing={{ xs: 3, md: 4 }} alignItems="center">
-              <Grid item xs={12} md={7}>
-                <Typography
-                  variant="h1"
+            <Link 
+              color="inherit" 
+              onClick={() => navigate('/')} 
+              sx={{ 
+                cursor: 'pointer',
+                textDecoration: 'none',
+                '&:hover': { color: 'white' }
+              }}
+            >
+              Home
+            </Link>
+            <Typography color="inherit" sx={{ fontWeight: 600 }}>
+              Research Projects
+            </Typography>
+          </Breadcrumbs>
+          
+          {/* Mobile Layout with Image */}
+          {(isMobile || isTablet) ? (
+            <Box>
+              {/* Mobile Header with integrated image */}
+              <Box sx={{ 
+                display: 'flex', 
+                flexDirection: 'column',
+                alignItems: 'center',
+                textAlign: 'center',
+                gap: { xs: 2, sm: 2.5 }
+              }}>
+                {/* Circular Image Container for Mobile */}
+                <Box
                   sx={{
-                    fontWeight: 800,
+                    width: { xs: 100, sm: 120, md: 140 },
+                    height: { xs: 100, sm: 120, md: 140 },
+                    borderRadius: '50%',
+                    border: '3px solid rgba(255,255,255,0.3)',
+                    boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+                    overflow: 'hidden',
+                    position: 'relative',
+                    background: 'white',
+                    mx: 'auto',
+                    mb: 1
+                  }}
+                >
+                  <img
+                    src="/images/student-research.jpeg" 
+                    alt="Public Health Research"
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover',
+                    }}
+                    onError={(e) => {
+                      // Fallback if image fails to load
+                      const target = e.target as HTMLImageElement;
+                      target.style.display = 'none';
+                      const parent = target.parentElement;
+                      if (parent) {
+                        parent.style.background = 'rgba(255,255,255,0.2)';
+                        parent.style.backdropFilter = 'blur(10px)';
+                        parent.innerHTML = `
+                          <div style="
+                            width: 100%;
+                            height: 100%;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                          ">
+                            <svg width="50" height="50" viewBox="0 0 24 24" fill="white">
+                              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                            </svg>
+                          </div>
+                        `;
+                      }
+                    }}
+                  />
+                </Box>
+
+                {/* Title and Description */}
+                <Box>
+                  <Typography 
+                    variant="h2" 
+                    component="h1" 
+                    gutterBottom 
+                    sx={{ 
+                      fontWeight: 'bold',
+                      textShadow: '0 4px 8px rgba(0,0,0,0.3)',
+                      fontSize: { 
+                        xs: isExtraSmall ? '1.5rem' : '1.75rem', 
+                        sm: '2rem', 
+                        md: '2.5rem'
+                      },
+                      lineHeight: 1.2,
+                      mb: { xs: 1, sm: 1.5 }
+                    }}
+                  >
+                    Public Health Research
+                  </Typography>
+                  
+                  <Typography 
+                    variant="h5" 
+                    sx={{ 
+                      opacity: 0.95,
+                      textShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                      lineHeight: 1.4,
+                      fontSize: { 
+                        xs: isExtraSmall ? '0.85rem' : '0.95rem', 
+                        sm: '1.05rem', 
+                        md: '1.15rem'
+                      },
+                      px: { xs: 2, sm: 3 },
+                      maxWidth: { xs: '100%', sm: '500px', md: '600px' },
+                      mx: 'auto'
+                    }}
+                  >
+                    Discover evidence-based research advancing health equity and improving population health outcomes worldwide
+                  </Typography>
+                </Box>
+              </Box>
+            </Box>
+          ) : (
+            // Desktop Layout (original)
+            <Grid container spacing={{ xs: 2, sm: 3, md: 4 }} alignItems="center">
+              {/* Left side content */}
+              <Grid item xs={12} md={8}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1.5, sm: 2, md: 3 }, mb: 2 }}>
+                  <Avatar
+                    sx={{
+                      bgcolor: 'rgba(255,255,255,0.2)',
+                      width: { xs: 40, sm: 50, md: 60, lg: 80 },
+                      height: { xs: 40, sm: 50, md: 60, lg: 80 },
+                      border: '3px solid rgba(255,255,255,0.3)'
+                    }}
+                  >
+                    <ResearchIcon sx={{ 
+                      fontSize: { xs: 20, sm: 24, md: 30, lg: 40 }, 
+                      color: 'white' 
+                    }} />
+                  </Avatar>
+                  <Box>
+                    <Typography 
+                      variant="h2" 
+                      component="h1" 
+                      gutterBottom 
+                      sx={{ 
+                        fontWeight: 'bold',
+                        textShadow: '0 4px 8px rgba(0,0,0,0.3)',
+                        fontSize: { 
+                          xs: isExtraSmall ? '1.25rem' : '1.5rem', 
+                          sm: '1.75rem', 
+                          md: '2.25rem', 
+                          lg: '3rem' 
+                        },
+                        lineHeight: 1.2,
+                        mb: { xs: 0.5, sm: 1 }
+                      }}
+                    >
+                      Public Health Research
+                    </Typography>
+                  </Box>
+                </Box>
+                <Typography 
+                  variant="h5" 
+                  sx={{ 
+                    opacity: 0.95,
+                    textShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                    lineHeight: 1.4,
                     fontSize: { 
-                      xs: isExtraSmall ? '1.75rem' : '2rem', 
-                      sm: '2.5rem', 
-                      md: '3.5rem', 
-                      lg: '4.5rem' 
+                      xs: isExtraSmall ? '0.8rem' : '0.875rem', 
+                      sm: '1rem', 
+                      md: '1.1rem', 
+                      lg: '1.25rem' 
                     },
-                    color: 'white',
-                    mb: { xs: 2, md: 3 },
-                    lineHeight: 1.1,
-                    letterSpacing: '-0.02em',
+                    px: { xs: 0, sm: 0 },
                     textAlign: { xs: 'center', md: 'left' }
                   }}
                 >
-                  Transforming Public Health
-                  <Box component="span" sx={{ color: '#a7ffeb' }}> Together</Box>
+                  Discover evidence-based research advancing health equity and improving population health outcomes worldwide
                 </Typography>
-                
-                <Typography
-                  variant="h5"
-                  sx={{
-                    mb: { xs: 3, md: 4 },
-                    color: 'rgba(255,255,255,0.9)',
-                    fontSize: { 
-                      xs: isExtraSmall ? '0.875rem' : '1rem', 
-                      sm: '1.1rem', 
-                      md: '1.3rem', 
-                      lg: '1.4rem' 
-                    },
-                    lineHeight: 1.6,
-                    fontWeight: 300,
-                    textAlign: { xs: 'center', md: 'left' },
-                    px: { xs: 1, md: 0 }
-                  }}
-                >
-                  Leading the way in health equity, innovative research, and community-driven solutions 
-                  for a healthier tomorrow.
-                </Typography>
-
-                {/* Modern Search Bar - Mobile Optimized */}
-                <Box sx={{ 
-                  width: '100%', 
-                  maxWidth: { xs: '100%', sm: 500, md: 600 },
-                  mx: { xs: 'auto', md: 0 },
-                  mb: { xs: 3, md: 4 }
-                }}>
-                  <Paper
-                    elevation={0}
-                    sx={{
-                      p: { xs: 1, sm: 1.5 },
-                      borderRadius: { xs: 2, sm: '50px' },
-                      bgcolor: 'rgba(255,255,255,0.95)',
-                      backdropFilter: 'blur(10px)',
-                      border: '1px solid rgba(255,255,255,0.3)',
-                      boxShadow: '0 8px 32px rgba(0,0,0,0.1)',
-                    }}
-                  >
-                    <Box sx={{ 
-                      display: 'flex', 
-                      alignItems: 'center',
-                      gap: { xs: 1, sm: 1.5 }
-                    }}>
-                      <SearchIcon sx={{ 
-                        color: '#0a4f3c', 
-                        ml: { xs: 1, sm: 2 },
-                        fontSize: { xs: 22, sm: 24 },
-                        flexShrink: 0
-                      }} />
-                      
-                      <TextField
-                        fullWidth
-                        placeholder={isExtraSmall ? "Search projects..." : "Search research projects..."}
-                        variant="standard"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        onKeyPress={handleKeyPress}
-                        InputProps={{
-                          disableUnderline: true,
-                          sx: { 
-                            fontSize: { xs: '0.9rem', sm: '1rem' },
-                            fontWeight: 500,
-                            color: '#333',
-                            '&::placeholder': {
-                              color: 'rgba(0,0,0,0.5)',
-                              opacity: 1
-                            }
-                          }
-                        }}
-                        sx={{
-                          '& input': {
-                            py: { xs: 1.2, sm: 1.5 },
-                            '&::placeholder': {
-                              color: 'rgba(0,0,0,0.5)',
-                              opacity: 1
-                            }
-                          }
-                        }}
-                      />
-                      
-                      <Button
-                        variant="contained"
-                        onClick={handleSearch}
-                        sx={{
-                          borderRadius: { xs: 1.5, sm: '50px' },
-                          px: { xs: 2.5, sm: 3, md: 4 },
-                          py: { xs: 1, sm: 1.25 },
-                          minWidth: { xs: 'auto', sm: 100 },
-                          bgcolor: '#0a4f3c',
-                          textTransform: 'none',
-                          fontWeight: 600,
-                          fontSize: { xs: '0.875rem', sm: '1rem' },
-                          boxShadow: 'none',
-                          flexShrink: 0,
-                          '&:hover': {
-                            bgcolor: '#063d2f',
-                            transform: 'translateY(-1px)',
-                            boxShadow: '0 4px 20px rgba(10,79,60,0.3)'
-                          },
-                          '&:active': {
-                            transform: 'translateY(0)'
-                          }
-                        }}
-                      >
-                        {isMobile ? 'Go' : 'Search'}
-                      </Button>
-                    </Box>
-                  </Paper>
-                </Box>
-
-                {/* Quick Stats - Mobile Optimized */}
-                <Grid container spacing={{ xs: 1.5, sm: 2 }} sx={{ justifyContent: { xs: 'center', md: 'flex-start' } }}>
-                  {[
-                    { number: '12+', label: 'Years of Excellence' },
-                    { number: '10K+', label: 'Alumni Worldwide' },
-                  ].map((stat, index) => (
-                    <Grid item xs={6} key={index}>
-                      <motion.div
-                        initial={{ opacity: 0, scale: 0.5 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        transition={{ delay: 0.5 + index * 0.1 }}
-                      >
-                        <Box sx={{ 
-                          textAlign: { xs: 'center', md: 'left' },
-                          p: { xs: 1, sm: 1.5 },
-                          borderRadius: 2,
-                          bgcolor: 'rgba(255,255,255,0.1)',
-                          backdropFilter: 'blur(10px)',
-                          border: '1px solid rgba(255,255,255,0.2)'
-                        }}>
-                          <Typography 
-                            variant="h4" 
-                            sx={{ 
-                              color: '#a7ffeb', 
-                              fontWeight: 700,
-                              fontSize: { 
-                                xs: isExtraSmall ? '1.5rem' : '1.8rem', 
-                                sm: '2rem', 
-                                md: '2.5rem' 
-                              },
-                              mb: 0.5
-                            }}
-                          >
-                            {stat.number}
-                          </Typography>
-                          <Typography 
-                            variant="body2" 
-                            sx={{ 
-                              color: 'rgba(255,255,255,0.8)',
-                              fontSize: { xs: '0.75rem', sm: '0.875rem', md: '1rem' },
-                              fontWeight: 500
-                            }}
-                          >
-                            {stat.label}
-                          </Typography>
-                        </Box>
-                      </motion.div>
-                    </Grid>
-                  ))}
-                </Grid>
               </Grid>
-              
-              {/* Hero Illustration - Mobile Optimized */}
-              <Grid item xs={12} md={5}>
-                <motion.div
-                  initial={{ opacity: 0, x: 50 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.8, delay: 0.3 }}
-                >
+
+              {/* Right side - Desktop image */}
+              <Grid item xs={12} md={4}>
+                <Box sx={{ display: 'flex', justifyContent: 'center' }}>
                   <Box
                     sx={{
+                      width: { md: 150, lg: 200 },
+                      height: { md: 150, lg: 200 },
+                      borderRadius: '50%',
+                      border: '4px solid rgba(255,255,255,0.3)',
+                      boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+                      overflow: 'hidden',
                       position: 'relative',
-                      height: { xs: 200, sm: 300, md: 500 },
+                      background: 'white',
                       display: 'flex',
                       alignItems: 'center',
-                      justifyContent: 'center',
-                      mt: { xs: 2, sm: 0 }
+                      justifyContent: 'center'
                     }}
                   >
-                    {/* Mobile-optimized animated circles */}
-                    <Box
-                      sx={{
-                        position: 'absolute',
-                        width: { xs: 150, sm: 250, md: 400 },
-                        height: { xs: 150, sm: 250, md: 400 },
-                        borderRadius: '50%',
-                        border: '2px solid rgba(255,255,255,0.3)',
-                        animation: 'pulse 4s ease-in-out infinite',
-                        '@keyframes pulse': {
-                          '0%, 100%': {
-                            transform: 'scale(1)',
-                            opacity: 0.3
-                          },
-                          '50%': {
-                            transform: 'scale(1.1)',
-                            opacity: 0.5
-                          }
-                        }
-                      }}
-                    />
-                    <Box
-                      sx={{
-                        position: 'absolute',
-                        width: { xs: 120, sm: 200, md: 300 },
-                        height: { xs: 120, sm: 200, md: 300 },
-                        borderRadius: '50%',
-                        border: '2px solid rgba(255,255,255,0.4)',
-                        animation: 'pulse 4s ease-in-out infinite 1s',
-                        '@keyframes pulse': {
-                          '0%, 100%': {
-                            transform: 'scale(1)',
-                            opacity: 0.2
-                          },
-                          '50%': {
-                            transform: 'scale(1.15)',
-                            opacity: 0.4
-                          }
-                        }
-                      }}
-                    />
-                    <PublicIcon sx={{ 
-                      fontSize: { xs: 60, sm: 80, md: 120 }, 
-                      color: 'rgba(255,255,255,0.9)',
-                      zIndex: 1
-                    }} />
-                  </Box>
-                </motion.div>
-              </Grid>
-            </Grid>
-          </motion.div>
-        </Container>
-
-        {/* Scroll Indicator - Hidden on mobile */}
-        {!isTablet && (
-          <Box
-            component={motion.div}
-            animate={{ y: [0, 10, 0] }}
-            transition={{ duration: 2, repeat: Infinity }}
-            sx={{
-              position: 'absolute',
-              bottom: 30,
-              left: '50%',
-              transform: 'translateX(-50%)',
-              color: 'white',
-              opacity: 0.7
-            }}
-          >
-            <Typography variant="caption">Scroll to explore</Typography>
-          </Box>
-        )}
-
-        {/* Mobile Swipe Hint */}
-        {isMobile && (
-          <Box
-            component={motion.div}
-            animate={{ y: [0, 8, 0] }}
-            transition={{ duration: 2, repeat: Infinity }}
-            sx={{
-              position: 'absolute',
-              bottom: { xs: 80, sm: 30 },
-              left: '50%',
-              transform: 'translateX(-50%)',
-              color: 'white',
-              opacity: 0.6,
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              gap: 0.5
-            }}
-          >
-            <TouchIcon sx={{ fontSize: { xs: 20, sm: 24 } }} />
-            <Typography variant="caption" sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}>
-              Swipe to explore
-            </Typography>
-          </Box>
-        )}
-      </Box>
-
-      {/* Modern Stats Section - Mobile Optimized */}
-      <Container maxWidth="lg" sx={{ 
-        py: { xs: 4, sm: 6, md: 8, lg: 10 }, 
-        mt: { xs: -4, sm: -6, md: -8, lg: -10 }, 
-        position: 'relative', 
-        zIndex: 10,
-        px: { xs: 1.5, sm: 2, md: 3 }
-      }}>
-        <Grid container spacing={{ xs: 1.5, sm: 2, md: 3 }}>
-          {[
-            { 
-              icon: ResearchIcon, 
-              number: stats?.total_projects || 75, 
-              label: 'Active Research Projects',
-              color: '#0a4f3c',
-              gradient: 'linear-gradient(135deg, #0a4f3c 0%, #1a7a5e 100%)'
-            },
-            { 
-              icon: SchoolIcon, 
-              number: stats?.total_institutions || 4, 
-              label: 'Academic Departments',
-              color: '#1a7a5e',
-              gradient: 'linear-gradient(135deg, #1a7a5e 0%, #2a9d7f 100%)'
-            },
-            { 
-              icon: PeopleIcon, 
-              number: stats?.total_research_areas || 2500, 
-              label: 'Students & Alumni',
-              color: '#2a9d7f',
-              gradient: 'linear-gradient(135deg, #2a9d7f 0%, #3ac0a0 100%)'
-            },
-            { 
-              icon: PublicIcon, 
-              number: stats?.total_downloads || 20, 
-              label: 'Expert Faculty',
-              color: '#3ac0a0',
-              gradient: 'linear-gradient(135deg, #3ac0a0 0%, #4ae3c1 100%)'
-            }
-          ].map((stat, index) => (
-            <Grid item xs={6} md={3} key={index}>
-              <motion.div
-                initial={{ opacity: 0, y: 50 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: index * 0.1 }}
-                viewport={{ once: true }}
-              >
-                <Card
-                  elevation={0}
-                  sx={{
-                    p: { xs: 1.5, sm: 2, md: 3 },
-                    height: '100%',
-                    background: 'white',
-                    borderRadius: { xs: 3, md: 4 },
-                    position: 'relative',
-                    overflow: 'hidden',
-                    transition: 'all 0.3s ease',
-                    border: '1px solid rgba(0,0,0,0.08)',
-                    cursor: 'pointer',
-                    '&:hover': {
-                      transform: { xs: 'none', md: 'translateY(-8px)' },
-                      boxShadow: { xs: 'none', md: '0 20px 40px rgba(0,0,0,0.1)' },
-                      '& .stat-icon': {
-                        transform: { xs: 'none', md: 'scale(1.1) rotate(5deg)' }
-                      }
-                    },
-                    '&:active': {
-                      transform: { xs: 'scale(0.98)', md: 'translateY(-8px) scale(0.98)' }
-                    }
-                  }}
-                >
-                  <Box
-                    sx={{
-                      position: 'absolute',
-                      top: -20,
-                      right: -20,
-                      width: { xs: 60, sm: 80, md: 100 },
-                      height: { xs: 60, sm: 80, md: 100 },
-                      borderRadius: '50%',
-                      background: stat.gradient,
-                      opacity: 0.1
-                    }}
-                  />
-                  <Box sx={{ position: 'relative', textAlign: 'center' }}>
-                    <Box
-                      className="stat-icon"
-                      sx={{
-                        width: { xs: 40, sm: 50, md: 60 },
-                        height: { xs: 40, sm: 50, md: 60 },
-                        borderRadius: { xs: 2, md: 3 },
-                        background: stat.gradient,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        mx: 'auto',
-                        mb: { xs: 1.5, md: 2 },
-                        transition: 'transform 0.3s ease',
-                        boxShadow: '0 10px 30px rgba(0,0,0,0.1)'
-                      }}
-                    >
-                      <stat.icon sx={{ 
-                        color: 'white', 
-                        fontSize: { xs: 20, sm: 24, md: 28 } 
-                      }} />
-                    </Box>
-                    <Typography
-                      variant="h3"
-                      sx={{
-                        fontWeight: 700,
-                        color: stat.color,
-                        mb: 0.5,
-                        fontSize: { 
-                          xs: isExtraSmall ? '1.5rem' : '1.8rem', 
-                          sm: '2rem', 
-                          md: '2.2rem',
-                          lg: '2.5rem' 
-                        }
-                      }}
-                    >
-                      {loading ? (
-                        <Skeleton sx={{ width: { xs: 60, sm: 80 }, mx: 'auto' }} />
-                      ) : (
-                        `${stat.number.toLocaleString()}${stat.number >= 1000 ? '+' : ''}`
-                      )}
-                    </Typography>
-                    <Typography 
-                      variant="body2" 
-                      sx={{ 
-                        color: 'text.secondary', 
-                        fontWeight: 500,
-                        fontSize: { xs: '0.7rem', sm: '0.75rem', md: '0.875rem' },
-                        lineHeight: 1.3,
-                        px: { xs: 0.5, sm: 0 }
-                      }}
-                    >
-                      {stat.label}
-                    </Typography>
-                  </Box>
-                </Card>
-              </motion.div>
-            </Grid>
-          ))}
-        </Grid>
-      </Container>
-
-      {/* Modern Dean's Message Section - Mobile Optimized */}
-      <Box sx={{ bgcolor: 'white', py: { xs: 4, sm: 6, md: 8, lg: 10 } }}>
-        <Container maxWidth="lg" sx={{ px: { xs: 1.5, sm: 2, md: 3 } }}>
-          <motion.div
-            initial={{ opacity: 0 }}
-            whileInView={{ opacity: 1 }}
-            transition={{ duration: 0.8 }}
-            viewport={{ once: true }}
-          >
-            <Grid container spacing={{ xs: 3, sm: 4, md: 6 }} alignItems="center">
-              <Grid item xs={12} md={5}>
-                <Box sx={{ position: 'relative' }}>
-                  <Box
-                    sx={{
-                      width: { 
-                        xs: isExtraSmall ? 150 : 180, 
-                        sm: 220, 
-                        md: 300, 
-                        lg: 350 
-                      },
-                      height: { 
-                        xs: isExtraSmall ? 150 : 180, 
-                        sm: 220, 
-                        md: 300, 
-                        lg: 350 
-                      },
-                      mx: 'auto',
-                      position: 'relative',
-                      '&::before': {
-                        content: '""',
-                        position: 'absolute',
-                        top: { xs: -10, sm: -15, md: -20 },
-                        left: { xs: -10, sm: -15, md: -20 },
-                        right: { xs: 10, sm: 15, md: 20 },
-                        bottom: { xs: 10, sm: 15, md: 20 },
-                        background: 'linear-gradient(135deg, #0a4f3c 0%, #2a9d7f 100%)',
-                        borderRadius: '50%',
-                        opacity: 0.1
-                      }
-                    }}
-                  >
-                    <Box
-                      component="img"
-                      src="/images/dean.jpeg"
-                      alt="Dean of School of Public Health"
-                      sx={{
+                    <img
+                      src="/images/student-research.jpeg" 
+                      alt="Public Health Student with Telescope"
+                      style={{
                         width: '100%',
                         height: '100%',
-                        borderRadius: '50%',
                         objectFit: 'cover',
-                        boxShadow: { 
-                          xs: '0 10px 30px rgba(0,0,0,0.15)', 
-                          md: '0 20px 60px rgba(0,0,0,0.15)' 
+                      }}
+                      onError={(e) => {
+                        // Fallback if image fails to load
+                        const target = e.target as HTMLImageElement;
+                        target.style.display = 'none';
+                        const parent = target.parentElement;
+                        if (parent) {
+                          parent.style.background = 'rgba(255,255,255,0.2)';
+                          parent.style.backdropFilter = 'blur(10px)';
+                          parent.innerHTML = '<div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;"><svg width="60" height="60" viewBox="0 0 24 24" fill="white"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg></div>';
                         }
                       }}
                     />
                   </Box>
-                  <Box sx={{ textAlign: 'center', mt: { xs: 2, sm: 3 } }}>
-                    <Typography 
-                      variant="h5" 
-                      sx={{ 
-                        fontWeight: 700, 
-                        color: '#0a4f3c',
-                        fontSize: { xs: '1.1rem', sm: '1.25rem', md: '1.4rem', lg: '1.5rem' }
-                      }}
-                    >
-                      Prof. Frank Baiden
-                    </Typography>
-                    <Typography variant="body1" sx={{ 
-                      color: 'text.secondary',
-                      fontSize: { xs: '0.875rem', sm: '1rem' }
-                    }}>
-                      Dean, School of Public Health
-                    </Typography>
-                  </Box>
-                </Box>
-              </Grid>
-              <Grid item xs={12} md={7}>
-                <Typography
-                  variant="overline"
-                  sx={{
-                    color: '#2a9d7f',
-                    fontWeight: 600,
-                    letterSpacing: 2,
-                    mb: 2,
-                    display: 'block',
-                    fontSize: { xs: '0.7rem', sm: '0.75rem', md: '0.875rem' },
-                    textAlign: { xs: 'center', md: 'left' }
-                  }}
-                >
-                  MESSAGE FROM THE DEAN
-                </Typography>
-                <Typography
-                  variant="h3"
-                  sx={{
-                    fontWeight: 700,
-                    color: '#0a4f3c',
-                    mb: 3,
-                    fontSize: { 
-                      xs: isExtraSmall ? '1.25rem' : '1.5rem', 
-                      sm: '1.75rem', 
-                      md: '2.25rem', 
-                      lg: '2.5rem' 
-                    },
-                    textAlign: { xs: 'center', md: 'left' },
-                    lineHeight: 1.2
-                  }}
-                >
-                  Building a Healthier Future Together
-                </Typography>
-                <Typography
-                  variant="body1"
-                  sx={{
-                    color: 'text.secondary',
-                    lineHeight: 1.8,
-                    mb: 3,
-                    fontSize: { xs: '0.875rem', sm: '1rem', md: '1.1rem' },
-                    textAlign: { xs: 'center', md: 'left' }
-                  }}
-                >
-                  Welcome to our School of Public Health, where innovation meets compassion. 
-                  We are dedicated to training the next generation of public health leaders 
-                  who will tackle the world's most pressing health challenges with evidence-based 
-                  solutions and unwavering commitment to equity.
-                </Typography>
-                <Typography
-                  variant="body1"
-                  sx={{
-                    color: 'text.secondary',
-                    lineHeight: 1.8,
-                    mb: 4,
-                    fontSize: { xs: '0.875rem', sm: '1rem', md: '1.1rem' },
-                    display: { xs: 'none', sm: 'block' },
-                    textAlign: { xs: 'center', md: 'left' }
-                  }}
-                >
-                  Our interdisciplinary approach, cutting-edge research facilities, and global 
-                  partnerships position us at the forefront of public health education and practice. 
-                  Join us in our mission to create healthier, more equitable communities worldwide.
-                </Typography>
-                <Box sx={{ textAlign: { xs: 'center', md: 'left' } }}>
-                  <Button
-                    variant="contained"
-                    size={isMobile ? "medium" : "large"}
-                    endIcon={<ArrowIcon sx={{ fontSize: { xs: 18, sm: 20 } }} />}
-                    component="a"
-                    href="https://uhas.edu.gh/uhas/"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    fullWidth={isMobile}
-                    sx={{
-                      bgcolor: '#0a4f3c',
-                      px: { xs: 3, sm: 4, md: 5 },
-                      py: { xs: 1.25, sm: 1.5 },
-                      borderRadius: 3,
-                      textTransform: 'none',
-                      fontWeight: 600,
-                      fontSize: { xs: '0.875rem', sm: '1rem' },
-                      boxShadow: 'none',
-                      maxWidth: { xs: '100%', sm: 280 },
-                      '&:hover': {
-                        bgcolor: '#063d2f',
-                        boxShadow: '0 10px 30px rgba(10,79,60,0.2)'
-                      },
-                      '&:active': {
-                        transform: 'scale(0.98)'
-                      }
-                    }}
-                  >
-                    Learn More About Us
-                  </Button>
                 </Box>
               </Grid>
             </Grid>
-          </motion.div>
+          )}
         </Container>
       </Box>
 
-      {/* Featured Research Section - Mobile Optimized */}
-      <Box sx={{ bgcolor: '#f8f9fa', py: { xs: 4, sm: 6, md: 8, lg: 10 } }}>
-        <Container maxWidth="lg" sx={{ px: { xs: 1.5, sm: 2, md: 3 } }}>
-          <Box sx={{ textAlign: 'center', mb: { xs: 4, md: 8 } }}>
-            <Typography
-              variant="overline"
-              sx={{
-                color: '#2a9d7f',
-                fontWeight: 600,
-                letterSpacing: 2,
-                mb: 2,
-                display: 'block',
-                fontSize: { xs: '0.7rem', sm: '0.75rem', md: '0.875rem' }
-              }}
-            >
-              RESEARCH EXCELLENCE
-            </Typography>
-            <Typography
-              variant="h3"
-              sx={{
-                fontWeight: 700,
-                color: '#0a4f3c',
-                mb: 2,
-                fontSize: { 
-                  xs: isExtraSmall ? '1.5rem' : '1.75rem', 
-                  sm: '2rem', 
-                  md: '2.5rem', 
-                  lg: '3rem' 
-                },
-                lineHeight: 1.2,
-                px: { xs: 1, sm: 0 }
-              }}
-            >
-              Featured Research Projects
-            </Typography>
-            <Typography
-              variant="body1"
-              sx={{
-                color: 'text.secondary',
-                maxWidth: { xs: '100%', sm: 500, md: 600 },
-                mx: 'auto',
-                fontSize: { xs: '0.875rem', sm: '1rem' },
-                px: { xs: 1, sm: 0 }
-              }}
-            >
-              Discover groundbreaking research that's shaping the future of public health
-            </Typography>
-          </Box>
-
-          {loading ? (
-            <Grid container spacing={{ xs: 1.5, sm: 2, md: 3, lg: 4 }}>
-              {[1, 2, 3].map((item) => (
-                <Grid item xs={12} sm={6} lg={4} key={item}>
-                  <Skeleton 
-                    variant="rectangular" 
-                    sx={{ 
-                      height: { xs: 300, sm: 350, md: 400 },
-                      borderRadius: { xs: 3, md: 4 } 
-                    }} 
-                  />
-                </Grid>
-              ))}
-            </Grid>
-          ) : featuredProjects.length > 0 ? (
-            <Grid container spacing={{ xs: 1.5, sm: 2, md: 3, lg: 4 }}>
-              {featuredProjects.slice(0, isMobile ? 3 : 6).map((project, index) => (
-                <Grid item xs={12} sm={6} lg={4} key={project.id}>
-                  <motion.div
-                    initial={{ opacity: 0, y: 30 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5, delay: index * 0.1 }}
-                    viewport={{ once: true }}
-                  >
-                    <Card
-                      elevation={0}
-                      sx={{
-                        height: '100%',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        borderRadius: { xs: 3, md: 4 },
-                        overflow: 'hidden',
-                        transition: 'all 0.3s ease',
-                        cursor: 'pointer',
-                        border: '1px solid rgba(0,0,0,0.08)',
-                        position: 'relative',
-                        '&:hover': {
-                          transform: { xs: 'none', md: 'translateY(-8px)' },
-                          boxShadow: { xs: '0 4px 20px rgba(0,0,0,0.08)', md: '0 20px 40px rgba(0,0,0,0.1)' },
-                          '& .project-image': {
-                            transform: { xs: 'none', md: 'scale(1.05)' }
-                          }
-                        },
-                        '&:active': {
-                          transform: { xs: 'scale(0.98)', md: 'translateY(-8px) scale(0.98)' }
-                        }
-                      }}
-                      onClick={() => navigate(`/projects/${project.slug}`)}
-                    >
-                      {/* Project Image/Gradient Header */}
-                      <Box
-                        className="project-image"
-                        sx={{
-                          height: { xs: 120, sm: 150, md: 180, lg: 200 },
-                          background: `linear-gradient(135deg, ${
-                            ['#0a4f3c', '#1a7a5e', '#2a9d7f'][index % 3]
-                          } 0%, ${
-                            ['#1a7a5e', '#2a9d7f', '#3ac0a0'][index % 3]
-                          } 100%)`,
-                          position: 'relative',
-                          transition: 'transform 0.3s ease',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center'
-                        }}
-                      >
-                        <ResearchIcon sx={{ 
-                          fontSize: { xs: 32, sm: 40, md: 50, lg: 60 }, 
-                          color: 'rgba(255,255,255,0.3)' 
-                        }} />
-                        <Box
-                          sx={{
-                            position: 'absolute',
-                            top: { xs: 8, sm: 12, md: 16 },
-                            right: { xs: 8, sm: 12, md: 16 },
-                            bgcolor: 'rgba(255,255,255,0.9)',
-                            borderRadius: 2,
-                            px: { xs: 1, sm: 1.5, md: 2 },
-                            py: { xs: 0.25, sm: 0.5 }
-                          }}
-                        >
-                          <Typography 
-                            variant="caption" 
-                            sx={{ 
-                              fontWeight: 600, 
-                              color: '#0a4f3c',
-                              fontSize: { xs: '0.65rem', sm: '0.7rem', md: '0.75rem' }
-                            }}
-                          >
-                            {project.research_area || 'Research'}
-                          </Typography>
-                        </Box>
-                      </Box>
-
-                      <CardContent sx={{ flexGrow: 1, p: { xs: 1.5, sm: 2, md: 3 } }}>
-                        <Typography
-                          variant="h6"
-                          sx={{
-                            fontWeight: 700,
-                            color: '#0a4f3c',
-                            mb: 2,
-                            display: '-webkit-box',
-                            WebkitLineClamp: 2,
-                            WebkitBoxOrient: 'vertical',
-                            overflow: 'hidden',
-                            fontSize: { xs: '0.875rem', sm: '1rem', md: '1.1rem', lg: '1.25rem' },
-                            lineHeight: 1.3
-                          }}
-                        >
-                          {project.title}
-                        </Typography>
-
-                        <Typography
-                          variant="body2"
-                          sx={{
-                            color: 'text.secondary',
-                            mb: { xs: 2, sm: 3 },
-                            display: '-webkit-box',
-                            WebkitLineClamp: { xs: 2, sm: 3 },
-                            WebkitBoxOrient: 'vertical',
-                            overflow: 'hidden',
-                            lineHeight: 1.6,
-                            fontSize: { xs: '0.8rem', sm: '0.875rem' }
-                          }}
-                        >
-                          {project.abstract || 'No abstract available'}
-                        </Typography>
-
-                        <Box sx={{ mb: { xs: 1.5, sm: 2 } }}>
-                          {project.degree_type && (
-                            <Chip
-                              label={project.degree_type}
-                              size="small"
-                              sx={{
-                                mr: 1,
-                                bgcolor: 'rgba(42,157,127,0.1)',
-                                color: '#2a9d7f',
-                                fontWeight: 600,
-                                border: 'none',
-                                fontSize: { xs: '0.65rem', sm: '0.7rem', md: '0.75rem' },
-                                height: { xs: 20, sm: 24 }
-                              }}
-                            />
-                          )}
-                        </Box>
-
-                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <Typography 
-                            variant="caption" 
-                            sx={{ 
-                              color: 'text.secondary',
-                              fontSize: { xs: '0.65rem', sm: '0.7rem', md: '0.75rem' },
-                              display: '-webkit-box',
-                              WebkitLineClamp: 1,
-                              WebkitBoxOrient: 'vertical',
-                              overflow: 'hidden',
-                              flex: 1,
-                              mr: 1
-                            }}
-                          >
-                            {project.author_name}{project.institution ? ` • ${project.institution}` : ''}
-                          </Typography>
-                        </Box>
-                      </CardContent>
-
-                      <CardActions sx={{ 
-                        p: { xs: 1.5, sm: 2, md: 3 }, 
-                        pt: 0, 
-                        borderTop: '1px solid rgba(0,0,0,0.08)',
-                        minHeight: { xs: 50, sm: 60 }
-                      }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 2, md: 3 }, width: '100%' }}>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                            <ViewIcon sx={{ fontSize: { xs: 14, sm: 16, md: 18 }, color: 'text.secondary' }} />
-                            <Typography 
-                              variant="caption" 
-                              sx={{ 
-                                color: 'text.secondary',
-                                fontSize: { xs: '0.65rem', sm: '0.7rem', md: '0.75rem' }
-                              }}
-                            >
-                              {project.view_count || 0}
-                            </Typography>
-                          </Box>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                            <DownloadIcon sx={{ fontSize: { xs: 14, sm: 16, md: 18 }, color: 'text.secondary' }} />
-                            <Typography 
-                              variant="caption" 
-                              sx={{ 
-                                color: 'text.secondary',
-                                fontSize: { xs: '0.65rem', sm: '0.7rem', md: '0.75rem' }
-                              }}
-                            >
-                              {project.download_count || 0}
-                            </Typography>
-                          </Box>
-                          <Box sx={{ flexGrow: 1 }} />
-                          <Typography
-                            variant="body2"
-                            sx={{
-                              color: '#2a9d7f',
-                              fontWeight: 600,
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 0.5,
-                              fontSize: { xs: '0.7rem', sm: '0.75rem', md: '0.875rem' }
-                            }}
-                          >
-                            {isMobile ? 'View' : 'View Details'}
-                            <ArrowIcon sx={{ fontSize: { xs: 12, sm: 14, md: 16 } }} />
-                          </Typography>
-                        </Box>
-                      </CardActions>
-                    </Card>
-                  </motion.div>
-                </Grid>
-              ))}
-            </Grid>
-          ) : (
-            <Box sx={{ textAlign: 'center', py: { xs: 3, sm: 4, md: 6, lg: 8 } }}>
-              <Typography variant="h6" sx={{ color: 'text.secondary', mb: 2 }}>
-                No featured projects available
-              </Typography>
-              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                Research projects will appear here once they are published
-              </Typography>
-            </Box>
-          )}
-
-          <Box sx={{ textAlign: 'center', mt: { xs: 4, md: 6 } }}>
+      <Container maxWidth="lg" sx={{ 
+        py: { xs: 2, sm: 3, md: 4 },
+        px: { xs: 1.5, sm: 2, md: 3 },
+        pb: { xs: isMobile ? 10 : 2, sm: isMobile ? 12 : 3, md: 4 }
+      }}>
+        {/* Mobile Filter Button */}
+        {isMobile && (
+          <Box sx={{ mb: { xs: 1.5, sm: 2 } }}>
             <Button
-              onClick={() => navigate('/projects')}
-              variant="outlined"
-              size={isMobile ? "medium" : "large"}
-              endIcon={<ArrowIcon />}
-              fullWidth={isMobile}
+              fullWidth
+              variant="contained"
+              startIcon={<TuneIcon sx={{ fontSize: { xs: 18, sm: 20 } }} />}
+              onClick={() => setMobileFilterOpen(true)}
               sx={{
-                px: { xs: 3, sm: 4, md: 5 },
-                py: 1.5,
-                borderRadius: 3,
+                bgcolor: '#1b5e20',
+                color: 'white',
+                py: { xs: 1, sm: 1.25 },
+                borderRadius: 2,
                 textTransform: 'none',
-                fontWeight: 600,
-                fontSize: { xs: '0.875rem', sm: '1rem' },
-                borderColor: '#0a4f3c',
-                color: '#0a4f3c',
-                borderWidth: 2,
-                maxWidth: { xs: '100%', sm: 300 },
+                fontSize: { xs: '0.8rem', sm: '0.875rem' },
+                fontWeight: 'bold',
+                boxShadow: '0 4px 12px rgba(27, 94, 32, 0.3)',
                 '&:hover': {
-                  borderWidth: 2,
-                  borderColor: '#063d2f',
-                  bgcolor: 'rgba(10,79,60,0.04)'
+                  bgcolor: '#0d4715'
                 },
                 '&:active': {
                   transform: 'scale(0.98)'
                 }
               }}
             >
-              Explore All Research
+              {isExtraSmall ? 'Search & Filter' : 'Search & Filter Projects'}
             </Button>
           </Box>
-        </Container>
-      </Box>
+        )}
 
-      {/* Modern Features Grid - Mobile Optimized */}
-      <Box sx={{ bgcolor: 'white', py: { xs: 4, sm: 6, md: 8, lg: 10 } }}>
-        <Container maxWidth="lg" sx={{ px: { xs: 1.5, sm: 2, md: 3 } }}>
-          <Box sx={{ textAlign: 'center', mb: { xs: 4, md: 8 } }}>
-            <Typography
-              variant="overline"
+        {/* Desktop Search and Filters */}
+        {!isMobile && (
+          <Paper sx={{ 
+            p: { sm: 2.5, md: 3, lg: 4 }, 
+            mb: { sm: 3, md: 4 }, 
+            borderRadius: { sm: 3, md: 4 },
+            border: '2px solid #c8e6c9',
+            background: 'linear-gradient(135deg, #ffffff 0%, #f1f8e9 100%)',
+            boxShadow: '0 8px 32px rgba(27, 94, 32, 0.1)'
+          }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: { sm: 1.5, md: 2 }, mb: { sm: 2.5, md: 3 } }}>
+              <Avatar sx={{ bgcolor: '#1b5e20', width: 40, height: 40 }}>
+                <FilterIcon />
+              </Avatar>
+              <Typography variant="h5" sx={{ 
+                color: '#1b5e20', 
+                fontWeight: 'bold',
+                fontSize: { sm: '1.1rem', md: '1.25rem', lg: '1.5rem' }
+              }}>
+                Search & Filter Research Projects
+              </Typography>
+            </Box>
+            
+            <FilterForm 
+              filters={filters}
+              setFilters={setFilters}
+              handleSearch={handleSearch}
+              clearFilters={clearFilters}
+              researchAreas={researchAreas}
+              institutions={institutions}
+              degreeTypes={degreeTypes}
+              academicYears={academicYears}
+              isMobile={isMobile}
+              isTablet={isTablet}
+              isExtraSmall={isExtraSmall}
+            />
+          </Paper>
+        )}
+
+        {/* Mobile Filter Drawer */}
+        <SwipeableDrawer
+          anchor="bottom"
+          open={mobileFilterOpen}
+          onClose={() => setMobileFilterOpen(false)}
+          onOpen={() => setMobileFilterOpen(true)}
+          disableSwipeToOpen={false}
+          sx={{
+            '& .MuiDrawer-paper': {
+              borderTopLeftRadius: { xs: 12, sm: 16 },
+              borderTopRightRadius: { xs: 12, sm: 16 },
+              maxHeight: '90vh',
+              pb: { xs: 1.5, sm: 2 }
+            }
+          }}
+        >
+          <Box sx={{ p: { xs: 1.5, sm: 2 } }}>
+            {/* Drag Handle */}
+            <Box
               sx={{
-                color: '#2a9d7f',
-                fontWeight: 600,
-                letterSpacing: 2,
-                mb: 2,
-                display: 'block',
-                fontSize: { xs: '0.7rem', sm: '0.75rem', md: '0.875rem' }
-              }}
-            >
-              WHY CHOOSE US
-            </Typography>
-            <Typography
-              variant="h3"
-              sx={{
-                fontWeight: 700,
-                color: '#0a4f3c',
-                mb: 2,
-                fontSize: { 
-                  xs: isExtraSmall ? '1.5rem' : '1.75rem', 
-                  sm: '2rem', 
-                  md: '2.5rem', 
-                  lg: '3rem' 
-                },
-                lineHeight: 1.2,
-                px: { xs: 1, sm: 0 }
-              }}
-            >
-              Excellence in Public Health Education
-            </Typography>
-            <Typography
-              variant="body1"
-              sx={{
-                color: 'text.secondary',
-                maxWidth: { xs: '100%', sm: 500, md: 600 },
+                width: 40,
+                height: 4,
+                bgcolor: '#e0e0e0',
+                borderRadius: 2,
                 mx: 'auto',
-                fontSize: { xs: '0.875rem', sm: '1rem' },
-                px: { xs: 1, sm: 0 }
+                mb: 2
+              }}
+            />
+            
+            <Box sx={{ 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              alignItems: 'center', 
+              mb: { xs: 1.5, sm: 2 },
+              pb: { xs: 1.5, sm: 2 },
+              borderBottom: '1px solid #e0e0e0'
+            }}>
+              <Typography variant="h6" sx={{ 
+                color: '#1b5e20', 
+                fontWeight: 'bold', 
+                fontSize: { xs: '0.875rem', sm: '1rem' }
+              }}>
+                Search & Filter
+              </Typography>
+              <IconButton 
+                onClick={() => setMobileFilterOpen(false)} 
+                size="small"
+                sx={{
+                  bgcolor: '#f5f5f5',
+                  '&:hover': { bgcolor: '#e0e0e0' }
+                }}
+              >
+                <CloseIcon />
+              </IconButton>
+            </Box>
+            
+            <FilterForm 
+              filters={filters}
+              setFilters={setFilters}
+              handleSearch={handleSearch}
+              clearFilters={clearFilters}
+              researchAreas={researchAreas}
+              institutions={institutions}
+              degreeTypes={degreeTypes}
+              academicYears={academicYears}
+              isMobile={isMobile}
+              isTablet={isTablet}
+              isExtraSmall={isExtraSmall}
+            />
+          </Box>
+        </SwipeableDrawer>
+
+        {/* Results Header */}
+        <Box sx={{ 
+          display: 'flex', 
+          flexDirection: { xs: 'column', sm: 'row' },
+          justifyContent: 'space-between', 
+          alignItems: { xs: 'flex-start', sm: 'center' }, 
+          gap: { xs: 1, sm: 1.5, md: 2 },
+          mb: { xs: 2, sm: 3, md: 4 },
+          p: { xs: 1.5, sm: 2, md: 2.5, lg: 3 },
+          bgcolor: 'rgba(27, 94, 32, 0.05)',
+          borderRadius: { xs: 2, sm: 3 },
+          border: '1px solid #c8e6c9'
+        }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1.5, sm: 2 } }}>
+            <Avatar sx={{ 
+              bgcolor: '#2e7d32', 
+              width: { xs: 28, sm: 32, md: 36, lg: 40 }, 
+              height: { xs: 28, sm: 32, md: 36, lg: 40 } 
+            }}>
+              <PublicIcon sx={{ fontSize: { xs: 16, sm: 18, md: 20, lg: 24 } }} />
+            </Avatar>
+            <Box>
+              <Typography 
+                variant="h5" 
+                sx={{ 
+                  color: '#1b5e20', 
+                  fontWeight: 'bold',
+                  fontSize: { 
+                    xs: isExtraSmall ? '0.8rem' : '0.875rem', 
+                    sm: '1rem', 
+                    md: '1.25rem', 
+                    lg: '1.5rem' 
+                  },
+                  lineHeight: 1.2
+                }}
+              >
+                {loading ? 'Searching Research...' : `${searchResponse.total} Research Projects Found`}
+              </Typography>
+              <Typography 
+                variant="body2" 
+                sx={{ 
+                  color: '#2e7d32',
+                  fontSize: { xs: '0.65rem', sm: '0.7rem', md: '0.8rem', lg: '0.875rem' },
+                  display: { xs: 'none', sm: 'block' }
+                }}
+              >
+                Evidence-based studies advancing public health knowledge
+              </Typography>
+            </Box>
+          </Box>
+          {searchResponse.total > 0 && (
+            <Chip
+              label={`Page ${searchResponse.page} of ${searchResponse.total_pages}`}
+              size="small"
+              sx={{
+                bgcolor: '#1b5e20',
+                color: 'white',
+                fontWeight: 'bold',
+                fontSize: { xs: '0.65rem', sm: '0.7rem', md: '0.8rem', lg: '0.875rem' },
+                height: { xs: 20, sm: 24, md: 28 }
+              }}
+            />
+          )}
+        </Box>
+
+        {/* Loading State */}
+        {loading && (
+          <Box sx={{ 
+            display: 'flex', 
+            justifyContent: 'center', 
+            alignItems: 'center',
+            py: { xs: 4, sm: 6, md: 8, lg: 12 },
+            flexDirection: 'column',
+            gap: { xs: 1.5, sm: 2, md: 3 }
+          }}>
+            <CircularProgress 
+              sx={{ 
+                color: '#1b5e20',
+                width: { xs: 40, sm: 50, md: 60, lg: 80 },
+                height: { xs: 40, sm: 50, md: 60, lg: 80 },
+                '& .MuiCircularProgress-circle': {
+                  strokeLinecap: 'round',
+                }
+              }} 
+            />
+            <Typography 
+              variant="h6" 
+              sx={{ 
+                color: '#2e7d32', 
+                fontWeight: 600,
+                fontSize: { xs: '0.8rem', sm: '0.875rem', md: '1rem', lg: '1.25rem' },
+                textAlign: 'center'
               }}
             >
-              Our comprehensive approach combines cutting-edge research, practical experience, 
-              and global perspectives
+              Searching Public Health Research Database...
             </Typography>
+            {isMobile && (
+              <Typography 
+                variant="caption" 
+                sx={{ 
+                  color: 'text.secondary',
+                  fontSize: { xs: '0.7rem', sm: '0.75rem' },
+                  textAlign: 'center',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 0.5
+                }}
+              >
+                <TouchIcon sx={{ fontSize: 14 }} />
+                Pull down to refresh
+              </Typography>
+            )}
           </Box>
-
-          <Grid container spacing={{ xs: 1.5, sm: 2, md: 3, lg: 4 }}>
-            {[
-              {
-                icon: PublicIcon,
-                title: 'Global Impact',
-                description: 'Our research reaches communities across all regions, addressing health challenges at local and global scales.',
-                color: '#0a4f3c'
-              },
-              {
-                icon: InnovationIcon,
-                title: 'Innovation Hub',
-                description: 'State-of-the-art facilities and interdisciplinary collaboration foster breakthrough discoveries in public health.',
-                color: '#1a7a5e'
-              },
-              {
-                icon: CommunityIcon,
-                title: 'Community Partnership',
-                description: 'Deep engagement with communities ensures our work addresses real-world needs and creates lasting impact.',
-                color: '#2a9d7f'
-              },
-              {
-                icon: HeartIcon,
-                title: 'Health Equity',
-                description: 'Committed to eliminating health disparities and ensuring equitable access to health resources for all populations.',
-                color: '#0a4f3c'
-              },
-              {
-                icon: ResearchIcon,
-                title: 'Research Excellence',
-                description: 'Leading groundbreaking studies that shape health policy.',
-                color: '#1a7a5e'
-              },
-              {
-                icon: AssessmentIcon, 
-                title: 'Data-Driven Solutions',
-                description: 'Using advanced analytics and evidence-based approaches to solve complex health challenges effectively.',
-                color: '#2a9d7f'
-              }
-    
-              
-            ].slice(0, isMobile ? 4 : 6).map((feature, index) => (
-              <Grid item xs={12} sm={6} lg={4} key={index}>
-                <motion.div
-                  initial={{ opacity: 0, y: 30 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.5, delay: index * 0.1 }}
-                  viewport={{ once: true }}
-                >
-                  <Box
-                    sx={{
-                      p: { xs: 2, sm: 3, md: 4 },
-                      height: '100%',
-                      borderRadius: { xs: 3, md: 4 },
-                      transition: 'all 0.3s ease',
-                      cursor: 'pointer',
-                      minHeight: { xs: 140, sm: 160, md: 180 },
-                      '&:hover': {
-                        bgcolor: '#f8f9fa',
-                        transform: { xs: 'none', md: 'translateY(-4px)' },
-                        '& .feature-icon': {
-                          transform: { xs: 'none', md: 'scale(1.1) rotate(5deg)' },
-                          bgcolor: feature.color
+        )}
+        {/* Projects Grid */}
+        {!loading && searchResponse.projects.length > 0 && (
+          <>
+            <Grid container spacing={{ xs: 1, sm: 1.5, md: 2, lg: 3 }}>
+              {searchResponse.projects.map((project, index) => (
+                <Grid item xs={12} sm={6} md={4} lg={4} key={project.id}>
+                  <Zoom in timeout={300 + index * 50}>
+                    <Card
+                      sx={{
+                        height: '100%',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        transition: 'all 0.3s ease',
+                        cursor: 'pointer',
+                        borderRadius: { xs: 2, sm: 3, md: 4 },
+                        border: '2px solid #c8e6c9',
+                        background: 'linear-gradient(135deg, #ffffff 0%, #f9fbe7 100%)',
+                        boxShadow: '0 4px 16px rgba(27, 94, 32, 0.1)',
+                        position: 'relative',
+                        overflow: 'hidden',
+                        '&:hover': {
+                          transform: { xs: 'none', sm: 'translateY(-4px)', md: 'translateY(-8px)' },
+                          boxShadow: '0 16px 48px rgba(27, 94, 32, 0.2)',
+                          border: '2px solid #2e7d32'
+                        },
+                        '&:active': {
+                          transform: { xs: 'scale(0.98)', sm: 'translateY(-4px) scale(0.98)', md: 'translateY(-8px) scale(0.98)' }
                         }
-                      },
-                      '&:active': {
-                        transform: { xs: 'scale(0.98)', md: 'translateY(-4px) scale(0.98)' }
+                      }}
+                      onClick={() => navigate(`/projects/${project.slug}`)}
+                    >
+                      {/* Touch Ripple Effect for Mobile */}
+                      <Box
+                        sx={{
+                          position: 'absolute',
+                          top: 0,
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          background: 'transparent',
+                          zIndex: 1,
+                          pointerEvents: 'none'
+                        }}
+                      />
+                      
+                      <CardContent sx={{ flexGrow: 1, p: { xs: 2, sm: 2.5, md: 3 } }}>
+                        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: { xs: 1.5, sm: 2 }, mb: 2 }}>
+                          <Avatar
+                            sx={{
+                              bgcolor: '#1b5e20',
+                              width: { xs: 28, sm: 32, md: 36, lg: 40 },
+                              height: { xs: 28, sm: 32, md: 36, lg: 40 },
+                              flexShrink: 0
+                            }}
+                          >
+                            <HealthIcon sx={{ fontSize: { xs: 14, sm: 16, md: 18, lg: 20 } }} />
+                          </Avatar>
+                          <Typography 
+                            variant="h6" 
+                            component="h3" 
+                            sx={{ 
+                              fontWeight: 'bold',
+                              color: '#1b5e20',
+                              display: '-webkit-box',
+                              WebkitLineClamp: { xs: 2, sm: 2 },
+                              WebkitBoxOrient: 'vertical',
+                              overflow: 'hidden',
+                              lineHeight: 1.3,
+                              fontSize: { 
+                                xs: isExtraSmall ? '0.8rem' : '0.875rem', 
+                                sm: '0.95rem', 
+                                md: '1.1rem', 
+                                lg: '1.25rem' 
+                              }
+                            }}
+                          >
+                            {project.title}
+                          </Typography>
+                        </Box>
+                        
+                        <Typography 
+                          variant="body2" 
+                          sx={{ 
+                            mb: { xs: 1.5, sm: 2, md: 3 },
+                            color: '#2e7d32',
+                            display: '-webkit-box',
+                            WebkitLineClamp: { xs: 2, sm: 3 },
+                            WebkitBoxOrient: 'vertical',
+                            overflow: 'hidden',
+                            lineHeight: 1.6,
+                            fontSize: { xs: '0.75rem', sm: '0.8rem', md: '0.875rem', lg: '1rem' }
+                          }}
+                        >
+                          {project.abstract || 'Research abstract not available. This study contributes to advancing public health knowledge and evidence-based practice.'}
+                        </Typography>
+                        
+                        <Box sx={{ mb: { xs: 1.5, sm: 2, md: 3 } }}>
+                          {project.research_area && (
+                            <Chip 
+                              label={project.research_area} 
+                              size="small"
+                              icon={<HealthIcon />}
+                              sx={{
+                                mr: 0.5, 
+                                mb: 0.5,
+                                bgcolor: '#1b5e20',
+                                color: 'white',
+                                fontWeight: 'bold',
+                                fontSize: { xs: '0.6rem', sm: '0.65rem', md: '0.7rem', lg: '0.75rem' },
+                                height: { xs: 20, sm: 24, md: 28 },
+                                '& .MuiChip-icon': { 
+                                  color: 'white',
+                                  fontSize: { xs: 12, sm: 14, md: 16 }
+                                }
+                              }}
+                            />
+                          )}
+                          {project.degree_type && (
+                            <Chip 
+                              label={project.degree_type} 
+                              size="small"
+                              icon={<SchoolIcon />}
+                              sx={{
+                                mr: 0.5, 
+                                mb: 0.5,
+                                bgcolor: '#2e7d32',
+                                color: 'white',
+                                fontWeight: 'bold',
+                                fontSize: { xs: '0.6rem', sm: '0.65rem', md: '0.7rem', lg: '0.75rem' },
+                                height: { xs: 20, sm: 24, md: 28 },
+                                '& .MuiChip-icon': { 
+                                  color: 'white',
+                                  fontSize: { xs: 12, sm: 14, md: 16 }
+                                }
+                              }}
+                            />
+                          )}
+                        </Box>
+
+                        <Box sx={{ 
+                          p: { xs: 1, sm: 1.25, md: 1.5, lg: 2 }, 
+                          bgcolor: 'rgba(27, 94, 32, 0.05)', 
+                          borderRadius: { xs: 1.5, sm: 2 },
+                          border: '1px solid #e8f5e9'
+                        }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 0.5, sm: 1 }, mb: { xs: 0.5, sm: 1 } }}>
+                            <PersonIcon sx={{ fontSize: { xs: 10, sm: 12, md: 14, lg: 16 }, color: '#2e7d32' }} />
+                            <Typography 
+                              variant="caption" 
+                              sx={{ 
+                                color: '#1b5e20', 
+                                fontWeight: 600,
+                                fontSize: { xs: '0.6rem', sm: '0.65rem', md: '0.75rem', lg: '0.875rem' },
+                                lineHeight: 1.2
+                              }}
+                            >
+                              {project.author_name}
+                            </Typography>
+                          </Box>
+                          
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 0.5, sm: 1 } }}>
+                            <SchoolIcon sx={{ fontSize: { xs: 10, sm: 12, md: 14, lg: 16 }, color: '#2e7d32' }} />
+                            <Typography 
+                              variant="caption" 
+                              sx={{ 
+                                color: '#2e7d32', 
+                                fontWeight: 500,
+                                fontSize: { xs: '0.6rem', sm: '0.65rem', md: '0.75rem', lg: '0.875rem' },
+                                lineHeight: 1.2,
+                                display: '-webkit-box',
+                                WebkitLineClamp: 1,
+                                WebkitBoxOrient: 'vertical',
+                                overflow: 'hidden'
+                              }}
+                            >
+                              {project.institution}
+                            </Typography>
+                          </Box>
+                        </Box>
+                      </CardContent>
+                      
+                      <CardActions sx={{ 
+                        p: { xs: 1.25, sm: 1.5, md: 2, lg: 3 }, 
+                        pt: 0, 
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        minHeight: { xs: 40, sm: 48, md: 56 }
+                      }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, sm: 1.5, md: 2 } }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                            <ViewIcon sx={{ fontSize: { xs: 10, sm: 12, md: 14, lg: 16 }, color: '#2e7d32' }} />
+                            <Typography 
+                              variant="caption" 
+                              sx={{ 
+                                color: '#2e7d32', 
+                                fontWeight: 600,
+                                fontSize: { xs: '0.6rem', sm: '0.65rem', md: '0.75rem', lg: '0.875rem' }
+                              }}
+                            >
+                              {project.view_count}
+                            </Typography>
+                          </Box>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                            <DownloadIcon sx={{ fontSize: { xs: 10, sm: 12, md: 14, lg: 16 }, color: '#2e7d32' }} />
+                            <Typography 
+                              variant="caption" 
+                              sx={{ 
+                                color: '#2e7d32', 
+                                fontWeight: 600,
+                                fontSize: { xs: '0.6rem', sm: '0.65rem', md: '0.75rem', lg: '0.875rem' }
+                              }}
+                            >
+                              {project.download_count}
+                            </Typography>
+                          </Box>
+                        </Box>
+                        <Button
+                          size="small"
+                          endIcon={<ArrowIcon sx={{ fontSize: { xs: 12, sm: 14, md: 16 } }} />}
+                          sx={{ 
+                            textTransform: 'none',
+                            color: '#1b5e20',
+                            fontWeight: 'bold',
+                            fontSize: { xs: '0.7rem', sm: '0.75rem', md: '0.875rem', lg: '1rem' },
+                            px: { xs: 0.75, sm: 1, md: 1.5 },
+                            py: { xs: 0.25, sm: 0.5, md: 0.75 },
+                            borderRadius: { xs: 1.5, sm: 2 },
+                            '&:hover': {
+                              bgcolor: '#e8f5e9'
+                            }
+                          }}
+                        >
+                          {isExtraSmall ? 'View' : 'View'}
+                        </Button>
+                      </CardActions>
+                    </Card>
+                  </Zoom>
+                </Grid>
+              ))}
+            </Grid>
+
+            {/* Pagination */}
+            {searchResponse.total_pages > 1 && (
+              <Box sx={{ 
+                display: 'flex', 
+                justifyContent: 'center', 
+                mt: { xs: 2, sm: 3, md: 4, lg: 6 } 
+              }}>
+                <Paper sx={{ 
+                  p: { xs: 0.5, sm: 0.75, md: 1, lg: 2 }, 
+                  borderRadius: { xs: 2, sm: 3 },
+                  border: '2px solid #c8e6c9',
+                  boxShadow: '0 4px 16px rgba(27, 94, 32, 0.1)'
+                }}>
+                  <Pagination
+                    count={searchResponse.total_pages}
+                    page={searchResponse.page}
+                    onChange={handlePageChange}
+                    size={isExtraSmall ? "small" : isMobile ? "medium" : isTablet ? "medium" : "large"}
+                    showFirstButton={!isMobile}
+                    showLastButton={!isMobile}
+                    siblingCount={isExtraSmall ? 0 : isMobile ? 0 : 1}
+                    boundaryCount={isExtraSmall ? 1 : isMobile ? 1 : 2}
+                    sx={{
+                      '& .MuiPaginationItem-root': {
+                        color: '#2e7d32',
+                        fontWeight: 600,
+                        fontSize: { xs: '0.7rem', sm: '0.75rem', md: '0.875rem', lg: '1rem' },
+                        minWidth: { xs: 24, sm: 28, md: 32, lg: 40 },
+                        height: { xs: 24, sm: 28, md: 32, lg: 40 },
+                        '&:hover': {
+                          bgcolor: '#e8f5e9'
+                        },
+                        '&.Mui-selected': {
+                          bgcolor: '#1b5e20',
+                          color: 'white',
+                          '&:hover': {
+                            bgcolor: '#0d4715'
+                          }
+                        }
                       }
                     }}
-                  >
-                    <Box
-                      className="feature-icon"
-                      sx={{
-                        width: { xs: 48, sm: 56, md: 64, lg: 70 },
-                        height: { xs: 48, sm: 56, md: 64, lg: 70 },
-                        borderRadius: 3,
-                        bgcolor: '#f0f7f5',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        mb: { xs: 2, sm: 2.5, md: 3 },
-                        transition: 'all 0.3s ease'
-                      }}
-                    >
-                      <feature.icon sx={{ 
-                        fontSize: { xs: 24, sm: 28, md: 30, lg: 32 }, 
-                        color: feature.color 
-                      }} />
-                    </Box>
-                    <Typography
-                      variant="h6"
-                      sx={{
-                        fontWeight: 700,
-                        color: '#0a4f3c',
-                        mb: { xs: 1.5, sm: 2 },
-                        fontSize: { xs: '1rem', sm: '1.1rem', md: '1.2rem', lg: '1.25rem' },
-                        lineHeight: 1.3,
-                        textAlign: 'center'
-                      }}
-                    >
-                      {feature.title}
-                    </Typography>
-                    <Typography
-                      variant="body2"
-                      sx={{
-                        color: 'text.secondary',
-                        lineHeight: 1.7,
-                        fontSize: { xs: '0.8rem', sm: '0.875rem' },
-                        textAlign: 'center'
-                      }}
-                    >
-                      {feature.description}
-                    </Typography>
-                  </Box>
-                </motion.div>
-              </Grid>
-            ))}
-          </Grid>
-        </Container>
-      </Box>
+                  />
+                </Paper>
+              </Box>
+            )}
+          </>
+        )}
 
+        {/* No Results */}
+        {!loading && searchResponse.projects.length === 0 && (
+          <Paper sx={{ 
+            p: { xs: 2, sm: 3, md: 4, lg: 6 }, 
+            textAlign: 'center',
+            borderRadius: { xs: 2, sm: 3, md: 4 },
+            border: '2px solid #c8e6c9',
+            background: 'linear-gradient(135deg, #ffffff 0%, #f1f8e9 100%)',
+            boxShadow: '0 8px 32px rgba(27, 94, 32, 0.1)'
+          }}>
+            <Avatar
+              sx={{
+                bgcolor: '#2e7d32',
+                width: { xs: 40, sm: 50, md: 60, lg: 80 },
+                height: { xs: 40, sm: 50, md: 60, lg: 80 },
+                mx: 'auto',
+                mb: { xs: 2, sm: 3 }
+              }}
+            >
+              <ResearchIcon sx={{ fontSize: { xs: 20, sm: 24, md: 30, lg: 40 } }} />
+            </Avatar>
+            <Typography 
+              variant="h4" 
+              gutterBottom 
+              sx={{ 
+                color: '#1b5e20', 
+                fontWeight: 'bold',
+                fontSize: { 
+                  xs: isExtraSmall ? '1.1rem' : '1.25rem', 
+                  sm: '1.4rem', 
+                  md: '1.75rem', 
+                  lg: '2.125rem' 
+                }
+              }}
+            >
+              No Research Projects Found
+            </Typography>
+            <Typography 
+              variant="body1" 
+              sx={{ 
+                color: '#2e7d32', 
+                mb: { xs: 3, sm: 4 }, 
+                maxWidth: { xs: '100%', sm: '400px', md: '500px' }, 
+                mx: 'auto',
+                fontSize: { xs: '0.8rem', sm: '0.875rem', md: '1rem' },
+                lineHeight: 1.6,
+                px: { xs: 1, sm: 0 }
+              }}
+            >
+              We couldn't find any public health research matching your criteria. 
+              Try adjusting your search terms or explore our complete research database.
+            </Typography>
+            <Box sx={{ 
+              display: 'flex', 
+              gap: { xs: 1, sm: 1.5, md: 2 }, 
+              justifyContent: 'center', 
+              flexDirection: { xs: 'column', sm: 'row' },
+              px: { xs: 1, sm: 0 }
+            }}>
+              <Button
+                variant="contained"
+                onClick={clearFilters}
+                size={isExtraSmall ? "medium" : isMobile ? "large" : "large"}
+                fullWidth={isMobile}
+                sx={{
+                  bgcolor: '#1b5e20',
+                  color: 'white',
+                  px: { xs: 2.5, sm: 3, md: 4 },
+                  py: { xs: 1, sm: 1.5 },
+                  borderRadius: { xs: 2, sm: 3 },
+                  textTransform: 'none',
+                  fontSize: { xs: '0.8rem', sm: '0.875rem', md: '1rem', lg: '1.1rem' },
+                  fontWeight: 'bold',
+                  '&:hover': {
+                    bgcolor: '#0d4715'
+                  },
+                  '&:active': {
+                    transform: 'scale(0.98)'
+                  }
+                }}
+              >
+                Clear All Filters
+              </Button>
+              <Button
+                variant="outlined"
+                onClick={() => navigate('/')}
+                size={isExtraSmall ? "medium" : isMobile ? "large" : "large"}
+                fullWidth={isMobile}
+                sx={{
+                  borderColor: '#2e7d32',
+                  color: '#2e7d32',
+                  px: { xs: 2.5, sm: 3, md: 4 },
+                  py: { xs: 1, sm: 1.5 },
+                  borderRadius: { xs: 2, sm: 3 },
+                  textTransform: 'none',
+                  fontSize: { xs: '0.8rem', sm: '0.875rem', md: '1rem', lg: '1.1rem' },
+                  fontWeight: 'bold',
+                  borderWidth: { xs: 1.5, sm: 2 },
+                  '&:hover': {
+                    borderColor: '#1b5e20',
+                    bgcolor: '#e8f5e9',
+                    borderWidth: { xs: 1.5, sm: 2 }
+                  },
+                  '&:active': {
+                    transform: 'scale(0.98)'
+                  }
+                }}
+              >
+                Back to Home
+              </Button>
+            </Box>
+          </Paper>
+        )}
+      </Container>
     </Box>
   );
 };
 
-export default HomePage;
+export default ProjectsPage;
