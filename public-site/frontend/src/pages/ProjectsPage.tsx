@@ -958,7 +958,7 @@ const ProjectsPage: React.FC = () => {
                   lineHeight: 1.2
                 }}
               >
-                {loading ? 'Searching Research...' : `${searchResponse.total} Research Projects Found`}
+                {loading ? 'Searching Database...' : `${searchResponse.total} Research Projects Found`}
               </Typography>
               <Typography 
                 variant="body2" 
