@@ -726,7 +726,7 @@ const ProjectDetailPage: React.FC = () => {
                     <CategoryIcon sx={{ fontSize: { xs: 20, sm: 24 } }} />
                   </Avatar>
                   <Typography variant={isMobile ? "h6" : "h5"} sx={{ color: '#1b5e20', fontWeight: 'bold' }}>
-                    Research Abstract
+                    Abstract
                   </Typography>
                 </Box>
                 <Typography 
