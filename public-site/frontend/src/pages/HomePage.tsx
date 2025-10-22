@@ -931,7 +931,10 @@ const HomePage: React.FC = () => {
                           transform: { xs: 'none', md: 'translateY(-8px)' },
                           boxShadow: { xs: '0 4px 20px rgba(0,0,0,0.08)', md: '0 20px 40px rgba(0,0,0,0.1)' },
                           '& .project-image': {
-                            transform: { xs: 'none', md: 'scale(1.05)' }
+                            transform: { xs: 'none', md: 'scale(1.05)' },
+                            '& .school-logo': {
+                              transform: { xs: 'none', md: 'rotate(360deg) scale(1.1)' }
+                            }
                           }
                         },
                         '&:active': {
@@ -940,7 +943,7 @@ const HomePage: React.FC = () => {
                       }}
                       onClick={() => navigate(`/projects/${project.slug}`)}
                     >
-                      {/* Project Image/Gradient Header */}
+                      {/* REDESIGNED Project Image/Gradient Header with School Logo */}
                       <Box
                         className="project-image"
                         sx={{
@@ -954,22 +957,110 @@ const HomePage: React.FC = () => {
                           transition: 'transform 0.3s ease',
                           display: 'flex',
                           alignItems: 'center',
-                          justifyContent: 'center'
+                          justifyContent: 'center',
+                          overflow: 'hidden',
+                          '&::before': {
+                            content: '""',
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            background: 'radial-gradient(circle at center, rgba(255,255,255,0.1) 0%, transparent 70%)',
+                            opacity: 0.5
+                          }
                         }}
                       >
-                        <ResearchIcon sx={{ 
-                          fontSize: { xs: 32, sm: 40, md: 50, lg: 60 }, 
-                          color: 'rgba(255,255,255,0.3)' 
-                        }} />
+                        {/* School Logo Container */}
+                        <Box
+                          className="school-logo"
+                          sx={{
+                            width: { xs: 60, sm: 70, md: 80, lg: 90 },
+                            height: { xs: 60, sm: 70, md: 80, lg: 90 },
+                            borderRadius: '50%',
+                            bgcolor: 'rgba(255,255,255,0.95)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            position: 'relative',
+                            zIndex: 1,
+                            transition: 'transform 0.6s ease',
+                            boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
+                            border: '3px solid rgba(255,255,255,0.3)',
+                            '&::after': {
+                              content: '""',
+                              position: 'absolute',
+                              inset: -8,
+                              borderRadius: '50%',
+                              border: '2px solid rgba(255,255,255,0.2)',
+                              animation: 'pulse 2s ease-in-out infinite'
+                            }
+                          }}
+                        >
+                          <Box
+                            component="img"
+                            src="/images/school-logo.jpeg"
+                            alt="School of Public Health Logo"
+                            sx={{
+                              width: { xs: '70%', sm: '75%', md: '80%' },
+                              height: { xs: '70%', sm: '75%', md: '80%' },
+                              objectFit: 'contain',
+                              filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))'
+                            }}
+                            onError={(e) => {
+                              // Fallback to SchoolIcon if logo fails to load
+                              const target = e.target as HTMLImageElement;
+                              target.style.display = 'none';
+                              const parent = target.parentElement;
+                              if (parent) {
+                                parent.innerHTML = `
+                                  <svg width="40" height="40" viewBox="0 0 24 24" fill="#0a4f3c">
+                                    <path d="M12 3L1 9l4 2.18v6L12 21l7-3.82v-6l2-1.09V17h2V9L12 3zm6.82 6L12 12.72 5.18 9 12 5.28 18.82 9zM17 15.99l-5 2.73-5-2.73v-3.72L12 15l5-2.73v3.72z"/>
+                                  </svg>
+                                `;
+                              }
+                            }}
+                          />
+                        </Box>
+
+                        {/* Decorative Elements */}
+                        <Box
+                          sx={{
+                            position: 'absolute',
+                            top: { xs: -20, sm: -30, md: -40 },
+                            left: { xs: -20, sm: -30, md: -40 },
+                            width: { xs: 60, sm: 80, md: 100 },
+                            height: { xs: 60, sm: 80, md: 100 },
+                            borderRadius: '50%',
+                            bgcolor: 'rgba(255,255,255,0.1)',
+                            filter: 'blur(20px)'
+                          }}
+                        />
+                        <Box
+                          sx={{
+                            position: 'absolute',
+                            bottom: { xs: -20, sm: -30, md: -40 },
+                            right: { xs: -20, sm: -30, md: -40 },
+                            width: { xs: 80, sm: 100, md: 120 },
+                            height: { xs: 80, sm: 100, md: 120 },
+                            borderRadius: '50%',
+                            bgcolor: 'rgba(0,0,0,0.1)',
+                            filter: 'blur(25px)'
+                          }}
+                        />
+
+                        {/* Research Area Badge */}
                         <Box
                           sx={{
                             position: 'absolute',
                             top: { xs: 8, sm: 12, md: 16 },
                             right: { xs: 8, sm: 12, md: 16 },
                             bgcolor: 'rgba(255,255,255,0.9)',
+                            backdropFilter: 'blur(10px)',
                             borderRadius: 2,
                             px: { xs: 1, sm: 1.5, md: 2 },
-                            py: { xs: 0.25, sm: 0.5 }
+                            py: { xs: 0.25, sm: 0.5 },
+                            boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
                           }}
                         >
                           <Typography 
@@ -977,12 +1068,33 @@ const HomePage: React.FC = () => {
                             sx={{ 
                               fontWeight: 600, 
                               color: '#0a4f3c',
-                              fontSize: { xs: '0.65rem', sm: '0.7rem', md: '0.75rem' }
+                              fontSize: { xs: '0.65rem', sm: '0.7rem', md: '0.75rem' },
+                              letterSpacing: 0.5
                             }}
                           >
                             {project.research_area || 'Research'}
                           </Typography>
                         </Box>
+
+                        {/* Animated Pulse Effect */}
+                        <style>
+                          {`
+                            @keyframes pulse {
+                              0% {
+                                transform: scale(1);
+                                opacity: 0.5;
+                              }
+                              50% {
+                                transform: scale(1.15);
+                                opacity: 0.3;
+                              }
+                              100% {
+                                transform: scale(1);
+                                opacity: 0.5;
+                              }
+                            }
+                          `}
+                        </style>
                       </Box>
 
                       <CardContent sx={{ flexGrow: 1, p: { xs: 1.5, sm: 2, md: 3 } }}>
