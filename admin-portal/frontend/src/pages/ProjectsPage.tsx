@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box,
   Typography,
@@ -60,8 +60,7 @@ import {
   FilterList as FilterIcon,
   Close as CloseIcon,
   Image as ImageIcon,
-  Refresh as RefreshIcon,
-  CleaningServices as CleanupIcon
+  Refresh as RefreshIcon
 } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
 import { adminApi } from '../services/adminApi';
@@ -82,8 +81,6 @@ interface ProjectFormData {
   supervisor: string;
   author_name: string;
   author_email: string;
-  meta_description: string;
-  meta_keywords: string;
   is_published: boolean;
   file?: File;
 }
@@ -107,8 +104,6 @@ const ProjectsPage: React.FC = () => {
     supervisor: '',
     author_name: '',
     author_email: '',
-    meta_description: '',
-    meta_keywords: '',
     is_published: true,
   });
   const [formError, setFormError] = useState('');
@@ -119,8 +114,11 @@ const ProjectsPage: React.FC = () => {
   const [degreeTypes, setDegreeTypes] = useState<string[]>([]);
   const { user: currentUser } = useAuth();
   const theme = useTheme();
-  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' });
-  const [cleaningUp, setCleaningUp] = useState(false);
+  const [snackbar, setSnackbar] = useState({ 
+    open: false, 
+    message: '', 
+    severity: 'success' as 'success' | 'error' | 'info' | 'warning' 
+  });
 
   // Add these new state variables
   const [formConstants, setFormConstants] = useState<FormConstants>({
@@ -132,13 +130,13 @@ const ProjectsPage: React.FC = () => {
 
   const [customFields, setCustomFields] = useState({
     custom_research_area: '',
-    custom_degree_type: '',
-    custom_institution: ''
+    custom_degree_type: ''
   });
 
-  // New state for managing images dialog
+  // New state for managing images dialog with real-time updates
   const [imagesDialogOpen, setImagesDialogOpen] = useState(false);
   const [selectedProjectForImages, setSelectedProjectForImages] = useState<Project | null>(null);
+  const [imageUpdateTrigger, setImageUpdateTrigger] = useState(0);
 
   useEffect(() => {
     loadProjects();
@@ -197,8 +195,6 @@ const ProjectsPage: React.FC = () => {
         supervisor: project.supervisor || '',
         author_name: project.author_name,
         author_email: project.author_email || '',
-        meta_description: project.meta_description || '',
-        meta_keywords: project.meta_keywords || '',
         is_published: project.is_published,
       });
     } else {
@@ -215,8 +211,6 @@ const ProjectsPage: React.FC = () => {
         supervisor: '',
         author_name: '',
         author_email: '',
-        meta_description: '',
-        meta_keywords: '',
         is_published: true,
       });
     }
@@ -232,14 +226,21 @@ const ProjectsPage: React.FC = () => {
     setActiveTab('basic');
     setCustomFields({
       custom_research_area: '',
-      custom_degree_type: '',
-      custom_institution: ''
+      custom_degree_type: ''
     });
   };
 
-  const handleOpenImagesDialog = (project: Project) => {
+  // Enhanced function with real-time updates
+  const handleOpenImagesDialog = async (project: Project) => {
     setSelectedProjectForImages(project);
     setImagesDialogOpen(true);
+    // Fetch fresh project data to ensure we have latest images
+    try {
+      const freshProject = await adminApi.getProject(project.id);
+      setSelectedProjectForImages(freshProject);
+    } catch (error) {
+      console.error('Failed to fetch project details:', error);
+    }
   };
 
   const handleCloseImagesDialog = () => {
@@ -247,6 +248,41 @@ const ProjectsPage: React.FC = () => {
     setSelectedProjectForImages(null);
     loadProjects(); // Refresh projects to update image counts
   };
+
+  // Real-time update callback for images
+  const handleImagesUpdate = useCallback(async () => {
+    if (selectedProjectForImages) {
+      try {
+        // Fetch updated project data
+        const updatedProject = await adminApi.getProject(selectedProjectForImages.id);
+        setSelectedProjectForImages(updatedProject);
+        
+        // Update the project in the main list
+        setProjects(prevProjects => 
+          prevProjects.map(p => 
+            p.id === updatedProject.id ? updatedProject : p
+          )
+        );
+        
+        // Trigger re-render of images component
+        setImageUpdateTrigger(prev => prev + 1);
+        
+        // Show success message
+        setSnackbar({
+          open: true,
+          message: 'Images updated successfully',
+          severity: 'info'
+        });
+      } catch (error) {
+        console.error('Failed to update project images:', error);
+        setSnackbar({
+          open: true,
+          message: 'Failed to refresh images',
+          severity: 'error'
+        });
+      }
+    }
+  }, [selectedProjectForImages]);
 
   const handleSubmit = async () => {
     setFormError('');
@@ -256,12 +292,14 @@ const ProjectsPage: React.FC = () => {
     if (!formData.title.trim()) {
       setFormError('Title is required');
       setSubmitting(false);
+      setActiveTab('basic');
       return;
     }
 
     if (!formData.author_name.trim()) {
       setFormError('Author name is required');
       setSubmitting(false);
+      setActiveTab('basic');
       return;
     }
 
@@ -279,20 +317,7 @@ const ProjectsPage: React.FC = () => {
       submitData.append('supervisor', formData.supervisor);
       submitData.append('author_name', formData.author_name);
       submitData.append('author_email', formData.author_email);
-      submitData.append('meta_description', formData.meta_description);
-      submitData.append('meta_keywords', formData.meta_keywords);
       submitData.append('is_published', formData.is_published.toString());
-
-      // Add custom fields if "Others" is selected
-      if (formData.research_area === 'Others') {
-        submitData.append('custom_research_area', customFields.custom_research_area);
-      }
-      if (formData.degree_type === 'Others') {
-        submitData.append('custom_degree_type', customFields.custom_degree_type);
-      }
-      if (formData.institution === 'Others') {
-        submitData.append('custom_institution', customFields.custom_institution);
-      }
 
       if (formData.file) {
         submitData.append('file', formData.file);
@@ -301,28 +326,39 @@ const ProjectsPage: React.FC = () => {
       let savedProject: Project;
       if (editingProject) {
         savedProject = await adminApi.updateProject(editingProject.id, submitData);
+        setSnackbar({
+          open: true,
+          message: 'Project updated successfully',
+          severity: 'success'
+        });
       } else {
         savedProject = await adminApi.createProject(submitData);
+        setSnackbar({
+          open: true,
+          message: 'Project created successfully',
+          severity: 'success'
+        });
       }
 
       await loadProjects();
       handleCloseDialog();
 
-      // Show success message
-      setSnackbar({
-        open: true,
-        message: editingProject ? 'Project updated successfully' : 'Project created successfully',
-        severity: 'success'
-      });
-
       // If it's a new project and a file was uploaded, ask if they want to manage images
       if (!editingProject && formData.file) {
         setTimeout(() => {
-          if (window.confirm('Would you like to manage images for this project?')) {
-            const newProject = projects.find(p => p.id === savedProject.id) || savedProject;
-            handleOpenImagesDialog(newProject);
-          }
-        }, 500);
+          setSnackbar({
+            open: true,
+            message: 'Would you like to manage images for this project?',
+            severity: 'info'
+          });
+          
+          setTimeout(() => {
+            if (window.confirm('Would you like to manage images for this project?')) {
+              const newProject = projects.find(p => p.id === savedProject.id) || savedProject;
+              handleOpenImagesDialog(newProject);
+            }
+          }, 500);
+        }, 1000);
       }
     } catch (err: any) {
       let errorMessage = 'Failed to save project';
@@ -334,6 +370,11 @@ const ProjectsPage: React.FC = () => {
       }
       
       setFormError(errorMessage);
+      setSnackbar({
+        open: true,
+        message: errorMessage,
+        severity: 'error'
+      });
     } finally {
       setSubmitting(false);
     }
@@ -350,7 +391,13 @@ const ProjectsPage: React.FC = () => {
           severity: 'success'
         });
       } catch (err: any) {
-        setError(err.response?.data?.detail || 'Failed to delete project');
+        const errorMessage = err.response?.data?.detail || 'Failed to delete project';
+        setError(errorMessage);
+        setSnackbar({
+          open: true,
+          message: errorMessage,
+          severity: 'error'
+        });
       }
     }
   };
@@ -360,40 +407,21 @@ const ProjectsPage: React.FC = () => {
       await adminApi.toggleProjectStatus(projectId);
       await loadProjects();
       setError('');
+      setSnackbar({
+        open: true,
+        message: 'Project status updated',
+        severity: 'success'
+      });
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to toggle project status');
+      const errorMessage = err.response?.data?.detail || 'Failed to toggle project status';
+      setError(errorMessage);
+      setSnackbar({
+        open: true,
+        message: errorMessage,
+        severity: 'error'
+      });
     }
   };
-
-  
-  //const handleCleanupImages = async (projectId?: number) => {
-    //setCleaningUp(true);
-    //try {
-      //let response;
-      //if (projectId) {
-        //response = await adminApi.cleanupProjectImages(projectId);
-      //} else {
-        //response = await adminApi.cleanupAllProjectImages();
-      //}
-      
-      //setSnackbar({
-        //open: true,
-        //message: response.message,
-        //severity: 'success'
-      //});
-      
-      // Refresh projects
-      //await loadProjects();
-    //} catch (error: any) {
-      //setSnackbar({
-        //open: true,
-        //message: error.message || 'Cleanup failed',
-        //severity: 'error'
-      //});
-    //} finally {
-      //setCleaningUp(false);
-    //}
-  //};
 
   const handleInputChange = (field: keyof ProjectFormData) => (
     event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement> | any
@@ -477,29 +505,7 @@ const ProjectsPage: React.FC = () => {
                 Manage research projects, publications, and academic content
               </Typography>
             </Box>
-              <Box sx={{ display: 'flex', gap: 2 }}>
-              
-              {/* {currentUser?.role === 'main_coordinator' && (
-                <Tooltip title="Clean up invalid images from all projects">
-                  <Button
-                    variant="outlined"
-                    startIcon={cleaningUp ? <CircularProgress size={16} /> : <CleanupIcon />}
-                    onClick={() => handleCleanupImages()}
-                    disabled={cleaningUp}
-                    sx={{
-                      borderRadius: 3,
-                      borderColor: '#0a4f3c',
-                      color: '#0a4f3c',
-                      '&:hover': {
-                        borderColor: '#063d2f',
-                        bgcolor: alpha('#0a4f3c', 0.04)
-                      }
-                    }}
-                  >
-                    Cleanup Images
-                  </Button>
-                </Tooltip>
-              )} */}
+            <Box sx={{ display: 'flex', gap: 2 }}>
               <Button
                 variant="contained"
                 size="large"
@@ -898,7 +904,7 @@ const ProjectsPage: React.FC = () => {
                       <TableCell>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                           <Badge 
-                            badgeContent={project.images?.length || 0} 
+                            badgeContent={project.image_records?.length || 0} 
                             color="primary"
                             sx={{
                               '& .MuiBadge-badge': {
@@ -922,24 +928,6 @@ const ProjectsPage: React.FC = () => {
                               </IconButton>
                             </Tooltip>
                           </Badge>
-                          {/*currentUser?.role === 'main_coordinator' && project.images && project.images.length > 0 && (
-                            <Tooltip title="Cleanup invalid images">
-                              <IconButton
-                                size="small"
-                                onClick={() => handleCleanupImages(project.id)}
-                                disabled={cleaningUp}
-                                sx={{
-                                  bgcolor: alpha('#ff9800', 0.1),
-                                  color: '#ff9800',
-                                  '&:hover': {
-                                    bgcolor: alpha('#ff9800', 0.2)
-                                  }
-                                }}
-                              >
-                                <CleanupIcon sx={{ fontSize: 16 }} />
-                              </IconButton>
-                            </Tooltip>
-                          )*/}
                         </Box>
                       </TableCell>
                       
@@ -1083,7 +1071,7 @@ const ProjectsPage: React.FC = () => {
         </DialogTitle>
 
         <DialogContent sx={{ px: 3 }}>
-          {/* Tab Navigation - Only show images tab for existing projects */}
+          {/* Tab Navigation */}
           <Tabs 
             value={activeTab} 
             onChange={(_, newValue) => setActiveTab(newValue)}
@@ -1107,7 +1095,7 @@ const ProjectsPage: React.FC = () => {
             }}
           >
             <Tab label="Basic Info" value="basic" />
-            <Tab label="Details" value="details" />
+            <Tab label="Academic Details" value="details" />
             <Tab label="Settings" value="settings" />
           </Tabs>
 
@@ -1286,24 +1274,27 @@ const ProjectsPage: React.FC = () => {
                     </Grid>
                     
                     <Grid item xs={12} md={6}>
-                      <ResearchAreaSelect
-                        value={formData.institution || ''}
-                        onChange={(value) => {
-                          setFormData(prev => ({ ...prev, institution: value }));
-                          if (value !== 'Others' || !value) {
-                            setCustomFields(prev => ({ ...prev, custom_institution: '' }));
-                          } else {
-                            setCustomFields(prev => ({ ...prev, custom_institution: value }));
-                          }
-                        }}
-                        options={formConstants.institutions}
-                        error={false}
-                        helperText=""
-                        required
-                        label="Institution"
-                        customLabel="Specify Institution"
-                        customPlaceholder="e.g., University of Cape Coast"
-                      />
+                      <FormControl fullWidth>
+                        <InputLabel>Institution</InputLabel>
+                        <Select
+                          value={formData.institution || ''}
+                          label="Institution"
+                          onChange={(e) => setFormData(prev => ({ ...prev, institution: e.target.value }))}
+                          sx={{
+                            borderRadius: 3,
+                            '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                              borderColor: '#0a4f3c',
+                            },
+                          }}
+                        >
+                          <MenuItem value="">Select Institution</MenuItem>
+                          {formConstants.institutions.map((inst) => (
+                            <MenuItem key={inst} value={inst}>
+                              {inst}
+                            </MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
                     </Grid>
                     
                     <Grid item xs={12} md={6}>
@@ -1313,7 +1304,7 @@ const ProjectsPage: React.FC = () => {
                         variant="outlined"
                         value={formData.department}
                         onChange={handleInputChange('department')}
-                          sx={{
+                        sx={{
                           '& .MuiOutlinedInput-root': {
                             borderRadius: 3,
                             '&.Mui-focused fieldset': {
@@ -1329,7 +1320,7 @@ const ProjectsPage: React.FC = () => {
                     
                     <Grid item xs={12}>
                       <TextField
-                        label="Supervisor(S)"
+                        label="Supervisor(s)"
                         fullWidth
                         variant="outlined"
                         value={formData.supervisor}
@@ -1352,7 +1343,7 @@ const ProjectsPage: React.FC = () => {
               </>
             )}
 
-            {/* Details Tab */}
+            {/* Academic Details Tab */}
             {activeTab === 'details' && (
               <>
                 {/* Academic Information Section */}
@@ -1371,140 +1362,75 @@ const ProjectsPage: React.FC = () => {
                   </Typography>
                   <Grid container spacing={3}>
                     <Grid item xs={12} md={6}>
-                      <ResearchAreaSelect
-                        value={formData.research_area || ''}
-                        onChange={(value) => {
-                          setFormData(prev => ({ ...prev, research_area: value }));
-                          if (value !== 'Others' || !value) {
-                            setCustomFields(prev => ({ ...prev, custom_research_area: '' }));
-                          } else {
-                            setCustomFields(prev => ({ ...prev, custom_research_area: value }));
-                          }
-                        }}
-                        options={formConstants.research_areas}
-                        error={false}
-                        helperText=""
-                        required
-                        label="Research Area"
-                        customLabel="Specify Research Area"
-                        customPlaceholder="e.g., Tropical Medicine, Health Informatics"
-                      />
+                      <FormControl fullWidth>
+                        <InputLabel>Research Area</InputLabel>
+                        <Select
+                          value={formData.research_area || ''}
+                          label="Research Area"
+                          onChange={(e) => setFormData(prev => ({ ...prev, research_area: e.target.value }))}
+                          sx={{
+                            borderRadius: 3,
+                            '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                              borderColor: '#0a4f3c',
+                            },
+                          }}
+                        >
+                          <MenuItem value="">Select Research Area</MenuItem>
+                          {formConstants.research_areas.map((area) => (
+                            <MenuItem key={area} value={area}>
+                              {area}
+                            </MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
                     </Grid>
                     
                     <Grid item xs={12} md={6}>
-                      <ResearchAreaSelect
-                        value={formData.degree_type || ''}
-                        onChange={(value) => {
-                          setFormData(prev => ({ ...prev, degree_type: value }));
-                          if (value !== 'Others' || !value) {
-                            setCustomFields(prev => ({ ...prev, custom_degree_type: '' }));
-                          } else {
-                            setCustomFields(prev => ({ ...prev, custom_degree_type: value }));
-                          }
-                        }}
-                        options={formConstants.degree_types}
-                        error={false}
-                        helperText=""
-                        required
-                        label="Degree Type"
-                        customLabel="Specify Degree Type"
-                        customPlaceholder="e.g., PGDip, DNP"
-                      />
+                      <FormControl fullWidth>
+                        <InputLabel>Degree Type</InputLabel>
+                        <Select
+                          value={formData.degree_type || ''}
+                          label="Degree Type"
+                          onChange={(e) => setFormData(prev => ({ ...prev, degree_type: e.target.value }))}
+                          sx={{
+                            borderRadius: 3,
+                            '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                              borderColor: '#0a4f3c',
+                            },
+                          }}
+                        >
+                          <MenuItem value="">Select Degree Type</MenuItem>
+                          {formConstants.degree_types.map((type) => (
+                            <MenuItem key={type} value={type}>
+                              {type}
+                            </MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
                     </Grid>
                     
                     <Grid item xs={12}>
-                      <TextField
-                        select
-                        fullWidth
-                        label="Academic Year"
-                        name="academic_year"
-                        value={formData.academic_year || ''}
-                        onChange={handleInputChange('academic_year')}
-                        error={false}
-                        helperText=""
-                        required
-                        sx={{
-                          '& .MuiOutlinedInput-root': {
+                      <FormControl fullWidth>
+                        <InputLabel>Academic Year</InputLabel>
+                        <Select
+                          value={formData.academic_year || ''}
+                          label="Academic Year"
+                          onChange={(e) => setFormData(prev => ({ ...prev, academic_year: e.target.value }))}
+                          sx={{
                             borderRadius: 3,
-                            '&.Mui-focused fieldset': {
+                            '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
                               borderColor: '#0a4f3c',
                             },
-                          },
-                          '& .MuiInputLabel-root.Mui-focused': {
-                            color: '#0a4f3c',
-                          },
-                        }}
-                      >
-                        {formConstants.academic_years.map((year) => (
-                          <MenuItem key={year} value={year}>
-                            {year}
-                          </MenuItem>
-                        ))}
-                      </TextField>
-                    </Grid>
-                  </Grid>
-                </Paper>
-
-                {/* SEO Information Section */}
-                <Paper
-                  elevation={0}
-                  sx={{
-                    p: 3,
-                    mb: 3,
-                    borderRadius: 3,
-                    border: '1px solid rgba(0,0,0,0.08)',
-                    bgcolor: '#f8f9fa'
-                  }}
-                >
-                  <Typography variant="h6" sx={{ fontWeight: 700, color: '#0a4f3c', mb: 2 }}>
-                    SEO & Metadata
-                  </Typography>
-                  <Grid container spacing={3}>
-                    <Grid item xs={12}>
-                      <TextField
-                        label="Meta Description"
-                        fullWidth
-                        multiline
-                        rows={2}
-                        variant="outlined"
-                        value={formData.meta_description}
-                        onChange={handleInputChange('meta_description')}
-                        placeholder="Brief description for search engines (150-160 characters)"
-                        helperText={`${formData.meta_description.length}/160 characters`}
-                        sx={{
-                          '& .MuiOutlinedInput-root': {
-                            borderRadius: 3,
-                            '&.Mui-focused fieldset': {
-                              borderColor: '#0a4f3c',
-                            },
-                          },
-                          '& .MuiInputLabel-root.Mui-focused': {
-                            color: '#0a4f3c',
-                          },
-                        }}
-                      />
-                    </Grid>
-                    
-                    <Grid item xs={12}>
-                      <TextField
-                        label="Meta Keywords"
-                        fullWidth
-                        variant="outlined"
-                        value={formData.meta_keywords}
-                        onChange={handleInputChange('meta_keywords')}
-                        placeholder="SEO keywords separated by commas"
-                        sx={{
-                          '& .MuiOutlinedInput-root': {
-                            borderRadius: 3,
-                            '&.Mui-focused fieldset': {
-                              borderColor: '#0a4f3c',
-                            },
-                          },
-                          '& .MuiInputLabel-root.Mui-focused': {
-                            color: '#0a4f3c',
-                          },
-                        }}
-                      />
+                          }}
+                        >
+                          <MenuItem value="">Select Academic Year</MenuItem>
+                          {formConstants.academic_years.map((year) => (
+                            <MenuItem key={year} value={year}>
+                              {year}
+                            </MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
                     </Grid>
                   </Grid>
                 </Paper>
@@ -1549,6 +1475,11 @@ const ProjectsPage: React.FC = () => {
                               setFormError('');
                               await loadProjects();
                               handleCloseDialog();
+                              setSnackbar({
+                                open: true,
+                                message: 'File deleted successfully',
+                                severity: 'success'
+                              });
                             } catch (err: any) {
                               setFormError(err.response?.data?.detail || 'Failed to delete file');
                             }
@@ -1698,7 +1629,7 @@ const ProjectsPage: React.FC = () => {
         </DialogActions>
       </Dialog>
 
-      {/* Separate Images Management Dialog */}
+      {/* Enhanced Images Management Dialog with Real-time Updates */}
       <Dialog
         open={imagesDialogOpen}
         onClose={handleCloseImagesDialog}
@@ -1732,38 +1663,46 @@ const ProjectsPage: React.FC = () => {
                 </Typography>
               </Box>
             </Box>
-            <IconButton onClick={handleCloseImagesDialog} sx={{ color: 'text.secondary' }}>
-              <CloseIcon />
-            </IconButton>
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <Tooltip title="Refresh Images">
+                <IconButton 
+                  onClick={handleImagesUpdate}
+                  sx={{ color: '#0a4f3c' }}
+                >
+                  <RefreshIcon />
+                </IconButton>
+              </Tooltip>
+              <IconButton onClick={handleCloseImagesDialog} sx={{ color: 'text.secondary' }}>
+                <CloseIcon />
+              </IconButton>
+            </Box>
           </Box>
         </DialogTitle>
 
         <DialogContent sx={{ px: 3, py: 2 }}>
           {selectedProjectForImages && (
             <ProjectImagesTab
+              key={imageUpdateTrigger} // Force re-render on updates
               projectId={selectedProjectForImages.id}
               images={selectedProjectForImages.image_records || []}
-              onImagesUpdate={() => {
-                loadProjects();
-                // setImagesDialogOpen(false);
-                // setSelectedProjectForImages(null);
-              }}
+              onImagesUpdate={handleImagesUpdate}
               disabled={false}
             />
           )}
         </DialogContent>
       </Dialog>
 
-      {/* Snackbar for notifications */}
+      {/* Enhanced Snackbar for notifications */}
       <Snackbar
         open={snackbar.open}
-        autoHideDuration={6000}
+        autoHideDuration={4000}
         onClose={() => setSnackbar({ ...snackbar, open: false })}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
       >
         <Alert
           onClose={() => setSnackbar({ ...snackbar, open: false })}
           severity={snackbar.severity}
+          variant="filled"
           sx={{ 
             width: '100%',
             borderRadius: 2,
@@ -1778,4 +1717,3 @@ const ProjectsPage: React.FC = () => {
 };
 
 export default ProjectsPage;
-        
