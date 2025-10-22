@@ -539,22 +539,22 @@ const HomePage: React.FC = () => {
             },
             { 
               icon: SchoolIcon, 
-              number: stats?.total_institutions || 4, 
+              number: 5, 
               label: 'Academic Departments',
               color: '#1a7a5e',
               gradient: 'linear-gradient(135deg, #1a7a5e 0%, #2a9d7f 100%)'
             },
             { 
               icon: PeopleIcon, 
-              number: stats?.total_research_areas || 2500, 
+              number: 2500, 
               label: 'Students & Alumni',
               color: '#2a9d7f',
               gradient: 'linear-gradient(135deg, #2a9d7f 0%, #3ac0a0 100%)'
             },
             { 
               icon: PublicIcon, 
-              number: stats?.total_downloads || 20, 
-              label: 'Expert Faculty',
+              number: 16, 
+              label: 'Regions Impacted',
               color: '#3ac0a0',
               gradient: 'linear-gradient(135deg, #3ac0a0 0%, #4ae3c1 100%)'
             }
