@@ -2,6 +2,9 @@ from pydantic_settings import BaseSettings
 from typing import List, Union, Optional
 import json
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 class Settings(BaseSettings):
     # Database - Same as public site
@@ -15,11 +18,11 @@ class Settings(BaseSettings):
     # Password Reset
     RESET_TOKEN_EXPIRE_MINUTES: int = 15
     
-    # Email Configuration (Gmail SMTP) - Make them Optional with defaults
-    MAIL_ENABLED: bool = False  # Default to False, set via env
-    MAIL_USERNAME: Optional[str] = None
-    MAIL_PASSWORD: Optional[str] = None
-    MAIL_FROM: Optional[str] = None
+    # Email Configuration - Don't use Optional, use empty string defaults
+    MAIL_ENABLED: bool = True
+    MAIL_USERNAME: str = ""
+    MAIL_PASSWORD: str = ""
+    MAIL_FROM: str = ""
     MAIL_FROM_NAME: str = "UHAS Research Hub Admin"
     MAIL_PORT: int = 587
     MAIL_SERVER: str = "smtp.gmail.com"
@@ -34,7 +37,7 @@ class Settings(BaseSettings):
     ALLOWED_FILE_TYPES: List[str] = [".pdf", ".doc", ".docx", ".txt", ".rtf"]
     
     # Storage Backend
-    STORAGE_BACKEND: str = "database"  # Always database now
+    STORAGE_BACKEND: str = "database"
     
     # Admin Portal
     PROJECT_NAME: str = "Literature Review Database - Admin Portal"
@@ -44,7 +47,7 @@ class Settings(BaseSettings):
     
     # Frontend URL for password reset links
     FRONTEND_URL: str = "https://research-hub-admin-portal.onrender.com"
-
+    
     # Backend URL (for API calls)
     BACKEND_URL: str = "https://literature-admin-backend.onrender.com"
     
@@ -55,7 +58,7 @@ class Settings(BaseSettings):
         "https://research-hub-admin-portal.onrender.com",
         "https://literature-admin-backend.onrender.com"
     ]
-
+    
     # Upload settings
     UPLOAD_DIR: str = "uploads"
     MAX_UPLOAD_SIZE: int = 10 * 1024 * 1024  # 10MB
@@ -65,7 +68,6 @@ class Settings(BaseSettings):
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = False
-        extra = "allow"
     
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -80,49 +82,38 @@ class Settings(BaseSettings):
                 else:
                     self.CORS_ORIGINS = [self.CORS_ORIGINS.strip()]
         
-        # Override with environment variables if they exist
-        # This ensures environment variables take precedence
-        if os.getenv("MAIL_ENABLED"):
-            self.MAIL_ENABLED = os.getenv("MAIL_ENABLED", "false").lower() in ["true", "1", "yes", "on"]
-        
-        if os.getenv("MAIL_USERNAME"):
-            self.MAIL_USERNAME = os.getenv("MAIL_USERNAME")
-        
-        if os.getenv("MAIL_PASSWORD"):
-            self.MAIL_PASSWORD = os.getenv("MAIL_PASSWORD")
-        
-        if os.getenv("MAIL_FROM"):
-            self.MAIL_FROM = os.getenv("MAIL_FROM")
-        elif self.MAIL_USERNAME:  # Use MAIL_USERNAME as fallback for MAIL_FROM
+        # Set MAIL_FROM to MAIL_USERNAME if not provided
+        if not self.MAIL_FROM and self.MAIL_USERNAME:
             self.MAIL_FROM = self.MAIL_USERNAME
-
+        
+        # Debug: Print what we loaded
+        logger.info(f"Email Config Loaded: MAIL_ENABLED={self.MAIL_ENABLED}")
+        logger.info(f"MAIL_USERNAME={'***' + self.MAIL_USERNAME[-10:] if self.MAIL_USERNAME else 'NOT SET'}")
+        logger.info(f"MAIL_PASSWORD={'SET' if self.MAIL_PASSWORD else 'NOT SET'}")
+        logger.info(f"MAIL_FROM={self.MAIL_FROM if self.MAIL_FROM else 'NOT SET'}")
+        logger.info(f"MAIL_SERVER={self.MAIL_SERVER}")
+    
     @property
     def is_email_configured(self) -> bool:
         """Check if email is properly configured"""
-        configured = bool(
-            self.MAIL_ENABLED and
-            self.MAIL_USERNAME and
-            self.MAIL_PASSWORD and
-            self.MAIL_SERVER and
-            self.MAIL_FROM
-        )
-        # Log the configuration status for debugging
-        if not configured:
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.info(f"Email configuration check: ENABLED={self.MAIL_ENABLED}, "
-                       f"USERNAME={'set' if self.MAIL_USERNAME else 'missing'}, "
-                       f"PASSWORD={'set' if self.MAIL_PASSWORD else 'missing'}, "
-                       f"FROM={'set' if self.MAIL_FROM else 'missing'}")
+        has_username = bool(self.MAIL_USERNAME)
+        has_password = bool(self.MAIL_PASSWORD)
+        has_from = bool(self.MAIL_FROM)
+        has_server = bool(self.MAIL_SERVER)
+        is_enabled = self.MAIL_ENABLED
+        
+        # Debug logging
+        logger.info(f"Email Configuration Check:")
+        logger.info(f"  - MAIL_ENABLED: {is_enabled}")
+        logger.info(f"  - Has USERNAME: {has_username}")
+        logger.info(f"  - Has PASSWORD: {has_password}")
+        logger.info(f"  - Has FROM: {has_from}")
+        logger.info(f"  - Has SERVER: {has_server}")
+        
+        configured = is_enabled and has_username and has_password and has_from and has_server
+        logger.info(f"  → Email configured: {configured}")
+        
         return configured
 
-# Create settings instance
+# Initialize settings
 settings = Settings()
-
-# Log email configuration status on startup
-import logging
-logger = logging.getLogger(__name__)
-logger.info(f"Email service configured: {settings.is_email_configured}")
-if settings.MAIL_ENABLED:
-    logger.info(f"Email settings: SERVER={settings.MAIL_SERVER}, PORT={settings.MAIL_PORT}, "
-               f"FROM={settings.MAIL_FROM if settings.MAIL_FROM else 'not set'}")
