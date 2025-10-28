@@ -1,28 +1,57 @@
-from typing import List
+from typing import List, Optional
 from fastapi_mail import FastMail, MessageSchema, ConnectionConfig, MessageType
 from pydantic import EmailStr
 import secrets
 import string
 from datetime import datetime, timedelta
+import logging
+import aiosmtplib
+from email.message import EmailMessage
 
 from .config import settings
 
-# Email configuration
-conf = ConnectionConfig(
-    MAIL_USERNAME=settings.MAIL_USERNAME,
-    MAIL_PASSWORD=settings.MAIL_PASSWORD,
-    MAIL_FROM=settings.MAIL_FROM,
-    MAIL_FROM_NAME=settings.MAIL_FROM_NAME,
-    MAIL_PORT=settings.MAIL_PORT,
-    MAIL_SERVER=settings.MAIL_SERVER,
-    MAIL_STARTTLS=settings.MAIL_STARTTLS,
-    MAIL_SSL_TLS=settings.MAIL_SSL_TLS,
-    USE_CREDENTIALS=settings.USE_CREDENTIALS,
-    VALIDATE_CERTS=settings.VALIDATE_CERTS,
-    TEMPLATE_FOLDER='app/templates/email'
-)
+logger = logging.getLogger(__name__)
 
-fm = FastMail(conf)
+# Check if email is properly configured
+def is_email_configured() -> bool:
+    """Check if email service is properly configured"""
+    return bool(
+        settings.MAIL_ENABLED and
+        settings.MAIL_USERNAME and
+        settings.MAIL_PASSWORD and
+        settings.MAIL_SERVER
+    )
+
+# Email configuration with error handling
+def get_mail_config() -> Optional[ConnectionConfig]:
+    """Get mail configuration if email is enabled"""
+    if not is_email_configured():
+        logger.warning("Email service is not configured. Emails will not be sent.")
+        return None
+    
+    try:
+        conf = ConnectionConfig(
+            MAIL_USERNAME=settings.MAIL_USERNAME,
+            MAIL_PASSWORD=settings.MAIL_PASSWORD,
+            MAIL_FROM=settings.MAIL_FROM,
+            MAIL_FROM_NAME=settings.MAIL_FROM_NAME,
+            MAIL_PORT=settings.MAIL_PORT,
+            MAIL_SERVER=settings.MAIL_SERVER,
+            MAIL_STARTTLS=settings.MAIL_STARTTLS,
+            MAIL_SSL_TLS=settings.MAIL_SSL_TLS,
+            USE_CREDENTIALS=settings.USE_CREDENTIALS,
+            VALIDATE_CERTS=settings.VALIDATE_CERTS,
+            TEMPLATE_FOLDER='app/templates/email',
+            TIMEOUT=280  
+        )
+        return conf
+    except Exception as e:
+        logger.error(f"Failed to create email configuration: {e}")
+        return None
+
+# Initialize FastMail instance only if configured
+mail_conf = get_mail_config()
+fm = FastMail(mail_conf) if mail_conf else None
 
 def generate_reset_token(length: int = 32) -> str:
     """Generate a secure alphanumeric token"""
@@ -33,6 +62,16 @@ async def send_password_reset_email(email: EmailStr, username: str, reset_url: s
     """Send password reset email with the complete reset URL"""
     # Extract token from URL for display
     token = reset_url.split('token=')[-1] if 'token=' in reset_url else ''
+    
+    # If email is not configured, log the reset URL
+    if not is_email_configured() or not fm:
+        logger.warning(f"Email service not configured. Reset link for {email}: {reset_url}")
+        logger.info(f"Reset token for {username}: {token}")
+        return {
+            "status": "logged",
+            "message": "Email service not configured. Reset link logged.",
+            "reset_url": reset_url
+        }
     
     html = f"""
     <!DOCTYPE html>
@@ -165,14 +204,44 @@ async def send_password_reset_email(email: EmailStr, username: str, reset_url: s
     </html>
     """
     
-    message = MessageSchema(
-        subject="Password Reset Request - Research Hub Admin Portal",
-        recipients=[email],
-        body=html,
-        subtype=MessageType.html
-    )
-    
-    await fm.send_message(message)
+    try:
+        message = MessageSchema(
+            subject="Password Reset Request - Research Hub Admin Portal",
+            recipients=[email],
+            body=html,
+            subtype=MessageType.html
+        )
+        
+        await fm.send_message(message)
+        logger.info(f"Password reset email sent successfully to {email}")
+        return {"status": "sent", "message": "Password reset email sent successfully"}
+        
+    except aiosmtplib.errors.SMTPConnectTimeoutError as e:
+        logger.error(f"SMTP connection timeout for {email}: {e}")
+        logger.info(f"Manual reset link for {email}: {reset_url}")
+        # Try fallback method
+        if await send_email_fallback(
+            email, 
+            "Password Reset Request - Research Hub Admin Portal",
+            html
+        ):
+            return {"status": "sent", "message": "Password reset email sent (fallback)"}
+        return {
+            "status": "failed",
+            "message": "Email service temporarily unavailable. Please contact support.",
+            "reset_url": reset_url,
+            "error": "timeout"
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to send password reset email to {email}: {e}")
+        logger.info(f"Manual reset link for {email}: {reset_url}")
+        return {
+            "status": "failed",
+            "message": "Failed to send email. Please contact support.",
+            "reset_url": reset_url,
+            "error": str(e)
+        }
 
 async def send_reset_password_email(email: EmailStr, token: str, username: str):
     """Legacy function - redirects to new function for backward compatibility"""
@@ -181,6 +250,12 @@ async def send_reset_password_email(email: EmailStr, token: str, username: str):
 
 async def send_password_reset_confirmation(email: EmailStr, username: str):
     """Send confirmation email after successful password reset"""
+    
+    # If email is not configured, just log
+    if not is_email_configured() or not fm:
+        logger.info(f"Password reset confirmation for {username} ({email}) - email not sent (service disabled)")
+        return {"status": "logged", "message": "Email service not configured"}
+    
     html = f"""
     <!DOCTYPE html>
     <html>
@@ -289,11 +364,92 @@ async def send_password_reset_confirmation(email: EmailStr, username: str):
     </html>
     """
     
-    message = MessageSchema(
-        subject="Password Reset Successful - Research Hub Admin Portal",
-        recipients=[email],
-        body=html,
-        subtype=MessageType.html
-    )
+    try:
+        message = MessageSchema(
+            subject="Password Reset Successful - Research Hub Admin Portal",
+            recipients=[email],
+            body=html,
+            subtype=MessageType.html
+        )
+        
+        await fm.send_message(message)
+        logger.info(f"Password reset confirmation sent to {email}")
+        return {"status": "sent", "message": "Confirmation email sent successfully"}
+        
+    except Exception as e:
+        logger.error(f"Failed to send confirmation email to {email}: {e}")
+        # Not critical if confirmation email fails
+        return {"status": "failed", "message": "Confirmation email failed", "error": str(e)}
+
+async def send_email_fallback(to_email: str, subject: str, html_content: str) -> bool:
+    """Fallback email sender using aiosmtplib directly"""
+    if not is_email_configured():
+        logger.warning(f"Email not configured. Would send: {subject} to {to_email}")
+        return False
     
-    await fm.send_message(message)
+    try:
+        message = EmailMessage()
+        message["From"] = f"{settings.MAIL_FROM_NAME} <{settings.MAIL_FROM}>"
+        message["To"] = to_email
+        message["Subject"] = subject
+        message.set_content(html_content, subtype="html")
+        
+        # Use aiosmtplib directly with custom timeout
+        await aiosmtplib.send(
+            message,
+            hostname=settings.MAIL_SERVER,
+            port=settings.MAIL_PORT,
+            username=settings.MAIL_USERNAME if settings.USE_CREDENTIALS else None,
+            password=settings.MAIL_PASSWORD if settings.USE_CREDENTIALS else None,
+            start_tls=settings.MAIL_STARTTLS,
+            timeout=60  # 60 second timeout
+        )
+        logger.info(f"Fallback email sent successfully to {to_email}")
+        return True
+    except Exception as e:
+        logger.error(f"Fallback email failed for {to_email}: {e}")
+        return False
+
+# Test email function for debugging
+async def test_email_connection() -> dict:
+    """Test email connection and configuration"""
+    if not is_email_configured():
+        return {
+            "status": "disabled",
+            "message": "Email service is not configured",
+            "configured": False
+        }
+    
+    try:
+        # Try to create a connection
+        test_message = EmailMessage()
+        test_message["From"] = f"{settings.MAIL_FROM_NAME} <{settings.MAIL_FROM}>"
+        test_message["To"] = settings.MAIL_FROM
+        test_message["Subject"] = "Test Connection"
+        test_message.set_content("This is a test email connection.")
+        
+        # Just test the connection, don't actually send
+        async with aiosmtplib.SMTP(
+            hostname=settings.MAIL_SERVER,
+            port=settings.MAIL_PORT,
+            timeout=10,
+            start_tls=settings.MAIL_STARTTLS
+        ) as smtp:
+            if settings.USE_CREDENTIALS:
+                await smtp.login(settings.MAIL_USERNAME, settings.MAIL_PASSWORD)
+            
+        return {
+            "status": "success",
+            "message": "Email connection successful",
+            "configured": True,
+            "server": settings.MAIL_SERVER,
+            "port": settings.MAIL_PORT
+        }
+    except Exception as e:
+        logger.error(f"Email connection test failed: {e}")
+        return {
+            "status": "failed",
+            "message": f"Email connection failed: {str(e)}",
+            "configured": True,
+            "error": str(e)
+        }
