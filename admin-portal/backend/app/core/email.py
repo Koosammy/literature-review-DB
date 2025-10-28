@@ -4,10 +4,9 @@ from pydantic import EmailStr
 import secrets
 import string
 import logging
+import os
 import aiosmtplib
 from email.message import EmailMessage
-
-from .config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -16,251 +15,218 @@ def generate_reset_token(length: int = 32) -> str:
     alphabet = string.ascii_letters + string.digits
     return ''.join(secrets.choice(alphabet) for _ in range(length))
 
+# Get email settings directly from environment
+MAIL_USERNAME = os.getenv("MAIL_USERNAME", "")
+MAIL_PASSWORD = os.getenv("MAIL_PASSWORD", "")
+MAIL_FROM = os.getenv("MAIL_FROM", MAIL_USERNAME)
+MAIL_SERVER = os.getenv("MAIL_SERVER", "smtp.gmail.com")
+MAIL_PORT = int(os.getenv("MAIL_PORT", "587"))
+FRONTEND_URL = os.getenv("FRONTEND_URL", "https://research-hub-admin-portal.onrender.com")
+
+# Log what we have
+logger.info(f"Email Configuration:")
+logger.info(f"  MAIL_USERNAME: {'SET' if MAIL_USERNAME else 'NOT SET'}")
+logger.info(f"  MAIL_PASSWORD: {'SET' if MAIL_PASSWORD else 'NOT SET'}")
+logger.info(f"  MAIL_FROM: {MAIL_FROM if MAIL_FROM else 'NOT SET'}")
+logger.info(f"  MAIL_SERVER: {MAIL_SERVER}")
+logger.info(f"  MAIL_PORT: {MAIL_PORT}")
+
 # Initialize FastMail
 fm: Optional[FastMail] = None
 
-# Configure email service
-if settings.is_email_configured:
+# Only initialize if we have credentials
+if MAIL_USERNAME and MAIL_PASSWORD:
     try:
-        logger.info("Attempting to configure email service...")
-        logger.info(f"Using: {settings.MAIL_SERVER}:{settings.MAIL_PORT}")
-        logger.info(f"From: {settings.MAIL_FROM_NAME} <{settings.MAIL_FROM}>")
-        
+        logger.info("Initializing FastMail...")
         conf = ConnectionConfig(
-            MAIL_USERNAME=settings.MAIL_USERNAME,
-            MAIL_PASSWORD=settings.MAIL_PASSWORD,
-            MAIL_FROM=settings.MAIL_FROM,
-            MAIL_FROM_NAME=settings.MAIL_FROM_NAME,
-            MAIL_PORT=settings.MAIL_PORT,
-            MAIL_SERVER=settings.MAIL_SERVER,
-            MAIL_STARTTLS=settings.MAIL_STARTTLS,
-            MAIL_SSL_TLS=settings.MAIL_SSL_TLS,
-            USE_CREDENTIALS=settings.USE_CREDENTIALS,
-            VALIDATE_CERTS=settings.VALIDATE_CERTS,
+            MAIL_USERNAME=MAIL_USERNAME,
+            MAIL_PASSWORD=MAIL_PASSWORD,
+            MAIL_FROM=MAIL_FROM or MAIL_USERNAME,
+            MAIL_FROM_NAME="UHAS Research Hub Admin",
+            MAIL_PORT=MAIL_PORT,
+            MAIL_SERVER=MAIL_SERVER,
+            MAIL_STARTTLS=True,
+            MAIL_SSL_TLS=False,
+            USE_CREDENTIALS=True,
+            VALIDATE_CERTS=True,
             TEMPLATE_FOLDER='app/templates/email'
         )
         fm = FastMail(conf)
-        logger.info("✅ Email service configured successfully!")
+        logger.info("✅ FastMail initialized successfully!")
     except Exception as e:
-        logger.error(f"❌ Failed to configure email service: {e}")
+        logger.error(f"❌ Failed to initialize FastMail: {e}")
         fm = None
 else:
-    logger.warning("⚠️ Email service is disabled or not configured properly")
-    logger.warning("Please set the following environment variables:")
-    logger.warning("  - MAIL_ENABLED=true")
-    logger.warning("  - MAIL_USERNAME=your-email@gmail.com")
-    logger.warning("  - MAIL_PASSWORD=your-app-password")
-    logger.warning("  - MAIL_FROM=your-email@gmail.com")
+    logger.warning("⚠️ Email credentials not found in environment variables")
+    logger.warning("Please set MAIL_USERNAME and MAIL_PASSWORD in Render environment")
 
 async def send_password_reset_email(email: EmailStr, username: str, reset_url: str):
     """Send password reset email with the complete reset URL"""
     token = reset_url.split('token=')[-1] if 'token=' in reset_url else ''
     
-    logger.info(f"Password reset requested for {email} (user: {username})")
-    logger.info(f"Reset URL generated: {reset_url}")
+    logger.info(f"Password reset requested for {email}")
+    logger.info(f"Reset URL: {reset_url}")
     
+    # If FastMail not configured, try direct SMTP
     if not fm:
-        logger.error("❌ Cannot send email: FastMail not initialized")
-        logger.info(f"📋 Manual reset link for {email}: {reset_url}")
-        logger.info(f"📋 Reset token: {token}")
-        # Return without error so the API call succeeds
-        return
+        logger.warning("FastMail not initialized, trying direct SMTP...")
+        if await send_email_direct(email, username, reset_url, token):
+            logger.info("✅ Email sent via direct SMTP")
+            return
+        else:
+            logger.error("❌ Direct SMTP also failed")
+            logger.info(f"📋 Manual reset link: {reset_url}")
+            return
     
     html = f"""
     <!DOCTYPE html>
     <html>
-    <head>
-        <style>
-            body {{
-                font-family: Arial, sans-serif;
-                line-height: 1.6;
-                color: #333;
-                max-width: 600px;
-                margin: 0 auto;
-                padding: 20px;
-            }}
-            .container {{
-                background-color: #f9f9f9;
-                border-radius: 10px;
-                padding: 30px;
-                box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            }}
-            .header {{
-                background: linear-gradient(135deg, #0a4f3c 0%, #2a9d7f 100%);
-                color: white;
-                padding: 20px;
-                border-radius: 10px 10px 0 0;
-                text-align: center;
-                margin: -30px -30px 30px -30px;
-            }}
-            .button {{
-                display: inline-block;
-                padding: 12px 30px;
-                background: linear-gradient(135deg, #0a4f3c 0%, #2a9d7f 100%);
-                color: white;
-                text-decoration: none;
-                border-radius: 5px;
-                font-weight: bold;
-                margin: 20px 0;
-                box-shadow: 0 4px 15px rgba(10, 79, 60, 0.3);
-            }}
-            .token-box {{
-                background-color: #e8f5e9;
-                border: 2px solid #0a4f3c;
-                padding: 15px;
-                border-radius: 5px;
-                font-family: monospace;
-                font-size: 14px;
-                text-align: center;
-                margin: 20px 0;
-                word-break: break-all;
-            }}
-            .warning {{
-                background-color: #fff3cd;
-                border: 1px solid #ffeaa7;
-                color: #856404;
-                padding: 15px;
-                border-radius: 5px;
-                margin: 20px 0;
-            }}
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <div class="header">
-                <h1>Password Reset Request</h1>
-            </div>
-            
+    <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="background: linear-gradient(135deg, #0a4f3c 0%, #2a9d7f 100%); color: white; padding: 20px; text-align: center; border-radius: 10px;">
+            <h1>Password Reset Request</h1>
+        </div>
+        
+        <div style="padding: 20px;">
             <p>Hello {username},</p>
+            <p>Click the button below to reset your password:</p>
             
-            <p>We received a request to reset your password for the Research Hub Admin Portal.</p>
-            
-            <div style="text-align: center;">
-                <a href="{reset_url}" class="button">Reset Password</a>
+            <div style="text-align: center; margin: 30px 0;">
+                <a href="{reset_url}" style="display: inline-block; padding: 12px 30px; background: #0a4f3c; color: white; text-decoration: none; border-radius: 5px; font-weight: bold;">
+                    Reset Password
+                </a>
             </div>
             
-            <div class="warning">
-                <strong>⚠️ Important:</strong> This link will expire in 30 minutes.
+            <div style="background: #fff3cd; border: 1px solid #ffeaa7; color: #856404; padding: 15px; border-radius: 5px; margin: 20px 0;">
+                <strong>⚠️ This link expires in 30 minutes</strong>
             </div>
             
-            <p><strong>Your reset token:</strong></p>
-            <div class="token-box">{token}</div>
+            <p>Token: <code style="background: #f0f0f0; padding: 5px; border-radius: 3px;">{token}</code></p>
             
-            <p>Or copy this link:</p>
-            <div class="token-box" style="font-size: 12px;">{reset_url}</div>
-            
-            <p style="color: #666; font-size: 12px; margin-top: 30px;">
-                If you didn't request this reset, please ignore this email.
-            </p>
+            <details style="margin-top: 20px;">
+                <summary>Full Link</summary>
+                <p style="word-break: break-all; font-size: 12px; background: #f0f0f0; padding: 10px; border-radius: 5px;">
+                    {reset_url}
+                </p>
+            </details>
         </div>
     </body>
     </html>
     """
     
     try:
-        logger.info(f"Attempting to send email to {email}...")
-        
         message = MessageSchema(
-            subject="Password Reset Request - Research Hub Admin Portal",
+            subject="Password Reset Request - Research Hub",
             recipients=[email],
             body=html,
             subtype=MessageType.html
         )
         
         await fm.send_message(message)
-        logger.info(f"✅ Password reset email successfully sent to {email}")
+        logger.info(f"✅ Password reset email sent to {email}")
         
-    except aiosmtplib.errors.SMTPConnectTimeoutError as e:
-        logger.error(f"❌ SMTP Timeout: {e}")
-        logger.info("Trying fallback email method...")
-        success = await send_email_fallback(email, "Password Reset Request", html)
-        if not success:
-            logger.error(f"📋 Manual reset link for {email}: {reset_url}")
-            
     except Exception as e:
-        logger.error(f"❌ Failed to send email: {type(e).__name__}: {e}")
-        logger.info(f"📋 Manual reset link for {email}: {reset_url}")
+        logger.error(f"❌ FastMail error: {e}")
+        # Try direct SMTP as fallback
+        if await send_email_direct(email, username, reset_url, token):
+            logger.info("✅ Email sent via fallback method")
+        else:
+            logger.error(f"📋 Manual reset link: {reset_url}")
 
-async def send_email_fallback(to_email: str, subject: str, html_content: str) -> bool:
-    """Fallback email sender using aiosmtplib directly"""
-    if not settings.is_email_configured:
+async def send_email_direct(email: str, username: str, reset_url: str, token: str) -> bool:
+    """Send email directly using aiosmtplib"""
+    if not MAIL_USERNAME or not MAIL_PASSWORD:
+        logger.error("No email credentials available for direct SMTP")
         return False
     
     try:
-        logger.info(f"Attempting fallback email to {to_email}...")
+        logger.info(f"Attempting direct SMTP to {email}...")
+        
+        html = f"""
+        <html>
+        <body>
+            <h2>Password Reset Request</h2>
+            <p>Hello {username},</p>
+            <p>Click here to reset your password:</p>
+            <p><a href="{reset_url}">{reset_url}</a></p>
+            <p>Token: {token}</p>
+            <p>This link expires in 30 minutes.</p>
+        </body>
+        </html>
+        """
         
         message = EmailMessage()
-        message["From"] = f"{settings.MAIL_FROM_NAME} <{settings.MAIL_FROM}>"
-        message["To"] = to_email
-        message["Subject"] = subject
-        message.set_content(html_content, subtype="html")
+        message["From"] = f"UHAS Research Hub <{MAIL_FROM}>"
+        message["To"] = email
+        message["Subject"] = "Password Reset Request"
+        message.set_content(html, subtype="html")
         
+        # Send with explicit settings
         await aiosmtplib.send(
             message,
-            hostname=settings.MAIL_SERVER,
-            port=settings.MAIL_PORT,
-            username=settings.MAIL_USERNAME,
-            password=settings.MAIL_PASSWORD,
-            start_tls=settings.MAIL_STARTTLS,
-            timeout=settings.MAIL_TIMEOUT
+            hostname=MAIL_SERVER,
+            port=MAIL_PORT,
+            username=MAIL_USERNAME,
+            password=MAIL_PASSWORD,
+            start_tls=True,
+            timeout=60
         )
-        logger.info(f"✅ Fallback email sent successfully to {to_email}")
+        
+        logger.info(f"✅ Direct SMTP email sent to {email}")
         return True
+        
     except Exception as e:
-        logger.error(f"❌ Fallback email also failed: {e}")
+        logger.error(f"❌ Direct SMTP failed: {e}")
         return False
 
 async def send_reset_password_email(email: EmailStr, token: str, username: str):
     """Legacy function for backward compatibility"""
-    reset_url = f"{settings.FRONTEND_URL}/#/reset-password?token={token}"
+    reset_url = f"{FRONTEND_URL}/#/reset-password?token={token}"
     await send_password_reset_email(email, username, reset_url)
 
 async def send_password_reset_confirmation(email: EmailStr, username: str):
     """Send confirmation after password reset"""
-    if not fm:
-        logger.info(f"Password reset confirmed for {username} - email skipped (not configured)")
+    if not fm and not (MAIL_USERNAME and MAIL_PASSWORD):
+        logger.info(f"Password reset confirmed for {username} - no email sent")
         return
     
     html = f"""
-    <!DOCTYPE html>
     <html>
     <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <h2 style="color: #0a4f3c;">Password Reset Successful!</h2>
         <p>Hello {username},</p>
         <p>Your password has been successfully reset.</p>
-        <a href="{settings.FRONTEND_URL}/#/login" style="display: inline-block; margin: 20px 0; padding: 12px 30px; background: #0a4f3c; color: white; text-decoration: none; border-radius: 5px;">Login Now</a>
+        <a href="{FRONTEND_URL}/#/login" style="display: inline-block; padding: 12px 30px; background: #0a4f3c; color: white; text-decoration: none; border-radius: 5px;">Login Now</a>
     </body>
     </html>
     """
     
     try:
-        message = MessageSchema(
-            subject="Password Reset Successful",
-            recipients=[email],
-            body=html,
-            subtype=MessageType.html
-        )
-        await fm.send_message(message)
+        if fm:
+            message = MessageSchema(
+                subject="Password Reset Successful",
+                recipients=[email],
+                body=html,
+                subtype=MessageType.html
+            )
+            await fm.send_message(message)
+        else:
+            # Use direct SMTP
+            message = EmailMessage()
+            message["From"] = f"UHAS Research Hub <{MAIL_FROM}>"
+            message["To"] = email
+            message["Subject"] = "Password Reset Successful"
+            message.set_content(html, subtype="html")
+            
+            await aiosmtplib.send(
+                message,
+                hostname=MAIL_SERVER,
+                port=MAIL_PORT,
+                username=MAIL_USERNAME,
+                password=MAIL_PASSWORD,
+                start_tls=True,
+                timeout=60
+            )
+        
         logger.info(f"✅ Confirmation email sent to {email}")
     except Exception as e:
         logger.error(f"Failed to send confirmation: {e}")
-
-# Test function
-async def test_email_configuration():
-    """Test if email is properly configured"""
-    logger.info("Testing email configuration...")
-    logger.info(f"Email configured: {settings.is_email_configured}")
-    logger.info(f"FastMail initialized: {fm is not None}")
-    if settings.is_email_configured and fm:
-        try:
-            test_email = settings.MAIL_FROM
-            await send_password_reset_email(
-                test_email,
-                "Test User",
-                f"{settings.FRONTEND_URL}/#/reset-password?token=TEST_TOKEN_12345"
-            )
-            return True
-        except Exception as e:
-            logger.error(f"Email test failed: {e}")
-            return False
-    return False
