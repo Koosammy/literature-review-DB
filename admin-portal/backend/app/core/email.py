@@ -30,6 +30,7 @@ def get_mail_config() -> Optional[ConnectionConfig]:
         return None
     
     try:
+        # Only include fields that ConnectionConfig accepts
         conf = ConnectionConfig(
             MAIL_USERNAME=settings.MAIL_USERNAME,
             MAIL_PASSWORD=settings.MAIL_PASSWORD,
@@ -41,8 +42,8 @@ def get_mail_config() -> Optional[ConnectionConfig]:
             MAIL_SSL_TLS=settings.MAIL_SSL_TLS,
             USE_CREDENTIALS=settings.USE_CREDENTIALS,
             VALIDATE_CERTS=settings.VALIDATE_CERTS,
-            TEMPLATE_FOLDER='app/templates/email',
-            TIMEOUT=280  
+            TEMPLATE_FOLDER='app/templates/email'
+            # Don't include TIMEOUT or MAIL_DEBUG here as they're not supported
         )
         return conf
     except Exception as e:
@@ -67,6 +68,7 @@ async def send_password_reset_email(email: EmailStr, username: str, reset_url: s
     if not is_email_configured() or not fm:
         logger.warning(f"Email service not configured. Reset link for {email}: {reset_url}")
         logger.info(f"Reset token for {username}: {token}")
+        # Don't raise an error, just log
         return {
             "status": "logged",
             "message": "Email service not configured. Reset link logged.",
@@ -236,9 +238,10 @@ async def send_password_reset_email(email: EmailStr, username: str, reset_url: s
     except Exception as e:
         logger.error(f"Failed to send password reset email to {email}: {e}")
         logger.info(f"Manual reset link for {email}: {reset_url}")
+        # Don't raise exception, return gracefully
         return {
             "status": "failed",
-            "message": "Failed to send email. Please contact support.",
+            "message": "Failed to send email. Please contact support for password reset.",
             "reset_url": reset_url,
             "error": str(e)
         }
@@ -382,7 +385,7 @@ async def send_password_reset_confirmation(email: EmailStr, username: str):
         return {"status": "failed", "message": "Confirmation email failed", "error": str(e)}
 
 async def send_email_fallback(to_email: str, subject: str, html_content: str) -> bool:
-    """Fallback email sender using aiosmtplib directly"""
+    """Fallback email sender using aiosmtplib directly with custom timeout"""
     if not is_email_configured():
         logger.warning(f"Email not configured. Would send: {subject} to {to_email}")
         return False
@@ -395,6 +398,9 @@ async def send_email_fallback(to_email: str, subject: str, html_content: str) ->
         message.set_content(html_content, subtype="html")
         
         # Use aiosmtplib directly with custom timeout
+        # Use the timeout from settings if available, otherwise default to 60
+        timeout = getattr(settings, 'MAIL_TIMEOUT', 60)
+        
         await aiosmtplib.send(
             message,
             hostname=settings.MAIL_SERVER,
@@ -402,7 +408,7 @@ async def send_email_fallback(to_email: str, subject: str, html_content: str) ->
             username=settings.MAIL_USERNAME if settings.USE_CREDENTIALS else None,
             password=settings.MAIL_PASSWORD if settings.USE_CREDENTIALS else None,
             start_tls=settings.MAIL_STARTTLS,
-            timeout=60  # 60 second timeout
+            timeout=timeout
         )
         logger.info(f"Fallback email sent successfully to {to_email}")
         return True
@@ -428,11 +434,13 @@ async def test_email_connection() -> dict:
         test_message["Subject"] = "Test Connection"
         test_message.set_content("This is a test email connection.")
         
+        timeout = getattr(settings, 'MAIL_TIMEOUT', 60)
+        
         # Just test the connection, don't actually send
         async with aiosmtplib.SMTP(
             hostname=settings.MAIL_SERVER,
             port=settings.MAIL_PORT,
-            timeout=10,
+            timeout=timeout,
             start_tls=settings.MAIL_STARTTLS
         ) as smtp:
             if settings.USE_CREDENTIALS:
