@@ -999,7 +999,7 @@ const HomePage: React.FC = () => {
                         >
                           <Box
                             component="img"
-                            src="/images/logo.jpeg"
+                            src="/images/school-logo.jpeg"
                             alt="School of Public Health Logo"
                             sx={{
                               width: { xs: '70%', sm: '75%', md: '80%' },
