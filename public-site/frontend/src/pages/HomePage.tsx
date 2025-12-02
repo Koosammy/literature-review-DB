@@ -977,7 +977,7 @@ const HomePage: React.FC = () => {
                           sx={{
                             width: { xs: 60, sm: 70, md: 80, lg: 90 },
                             height: { xs: 60, sm: 70, md: 80, lg: 90 },
-                            borderRadius: '50%',
+                            borderRadius: 2,
                             bgcolor: 'rgba(255,255,255,0.95)',
                             display: 'flex',
                             alignItems: 'center',
@@ -991,7 +991,7 @@ const HomePage: React.FC = () => {
                               content: '""',
                               position: 'absolute',
                               inset: -8,
-                              borderRadius: '50%',
+                              borderRadius: 2,
                               border: '2px solid rgba(255,255,255,0.2)',
                               animation: 'pulse 2s ease-in-out infinite'
                             }
