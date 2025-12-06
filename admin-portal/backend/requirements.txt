@@ -40,8 +40,6 @@ pdfplumber>=0.9.0                    # Primary table extraction library
 plotly>=5.17.0                       # Professional table visualization
 camelot-py[cv]>=0.11.0              # Fallback for bordered tables
 opencv-python>=4.8.1                 # Visual table detection
-transformers>=4.36.0                  # Table Transformer model
-torch>=2.1.0                         # PyTorch for deep learning models
 
 # Additional data processing (NEW)
 numpy>=1.24.0                        # Numerical operations for table processing
