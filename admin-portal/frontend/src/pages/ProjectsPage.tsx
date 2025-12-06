@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Box,
   Typography,
@@ -113,265 +113,11 @@ interface AbstractHistory {
   author: string;
 }
 
-// Simple markdown parser for abstract preview
-const parseMarkdown = (text: string): React.ReactNode => {
-  if (!text) return null;
-  
-  // Process the text line by line
-  const lines = text.split('\n');
-  const elements: React.ReactNode[] = [];
-  
-  lines.forEach((line, index) => {
-    // Handle code blocks
-    if (line.startsWith('```')) {
-      elements.push(
-        <Box
-          key={index}
-          component="pre"
-          sx={{
-            bgcolor: alpha('#0a4f3c', 0.05),
-            p: 2,
-            borderRadius: 1,
-            fontFamily: 'monospace',
-            fontSize: '0.875rem',
-            overflow: 'auto',
-            my: 1
-          }}
-        >
-          {line.substring(3)}
-        </Box>
-      );
-      return;
-    }
-    
-    // Handle blockquotes
-    if (line.startsWith('> ')) {
-      elements.push(
-        <Box
-          key={index}
-          sx={{
-            borderLeft: '3px solid #0a4f3c',
-            pl: 2,
-            py: 1,
-            my: 1,
-            fontStyle: 'italic',
-            color: 'text.secondary'
-          }}
-        >
-          {parseInlineMarkdown(line.substring(2))}
-        </Box>
-      );
-      return;
-    }
-    
-    // Handle numbered lists
-    if (/^\d+\.\s/.test(line)) {
-      elements.push(
-        <Box key={index} sx={{ display: 'flex', my: 0.5 }}>
-          <Typography variant="body1" sx={{ mr: 1 }}>
-            {line.match(/^\d+\./)?.[0]}
-          </Typography>
-          <Typography variant="body1">
-            {parseInlineMarkdown(line.replace(/^\d+\.\s/, ''))}
-          </Typography>
-        </Box>
-      );
-      return;
-    }
-    
-    // Handle bullet lists
-    if (line.startsWith('• ')) {
-      elements.push(
-        <Box key={index} sx={{ display: 'flex', my: 0.5 }}>
-          <Typography variant="body1" sx={{ mr: 1 }}>
-            •
-          </Typography>
-          <Typography variant="body1">
-            {parseInlineMarkdown(line.substring(2))}
-          </Typography>
-        </Box>
-      );
-      return;
-    }
-    
-    // Handle regular paragraphs
-    if (line.trim()) {
-      elements.push(
-        <Typography key={index} variant="body1" sx={{ my: 1 }}>
-          {parseInlineMarkdown(line)}
-        </Typography>
-      );
-    } else {
-      // Add empty line for line breaks
-      elements.push(<br key={index} />);
-    }
-  });
-  
-  return <>{elements}</>;
-};
-
-// Parse inline markdown (bold, italic, underline, code)
-const parseInlineMarkdown = (text: string): React.ReactNode => {
-  if (!text) return null;
-  
-  // Create a copy of the text to work with
-  let result = text;
-  const elements: React.ReactNode[] = [];
-  let lastIndex = 0;
-  
-  // Process bold text (**text**)
-  const boldRegex = /\*\*(.*?)\*\*/g;
-  let match;
-  
-  while ((match = boldRegex.exec(result)) !== null) {
-    // Add text before the match
-    if (match.index > lastIndex) {
-      elements.push(result.substring(lastIndex, match.index));
-    }
-    
-    // Add bold text
-    elements.push(
-      <Typography key={`bold-${match.index}`} component="span" sx={{ fontWeight: 'bold' }}>
-        {match[1]}
-      </Typography>
-    );
-    
-    lastIndex = match.index + match[0].length;
-  }
-  
-  // Add remaining text
-  if (lastIndex < result.length) {
-    elements.push(result.substring(lastIndex));
-  }
-  
-  // If no bold formatting was found, return the original text
-  if (elements.length === 0) {
-    return result;
-  }
-  
-  // Process the result for italic formatting (*text*)
-  const italicElements: React.ReactNode[] = [];
-  lastIndex = 0;
-  
-  elements.forEach((element, index) => {
-    if (typeof element === 'string') {
-      // Process italic formatting in string elements
-      const italicRegex = /\*(.*?)\*/g;
-      let italicMatch;
-      let lastItalicIndex = 0;
-      
-      while ((italicMatch = italicRegex.exec(element)) !== null) {
-        // Add text before the match
-        if (italicMatch.index > lastItalicIndex) {
-          italicElements.push(element.substring(lastItalicIndex, italicMatch.index));
-        }
-        
-        // Add italic text
-        italicElements.push(
-          <Typography key={`italic-${index}-${italicMatch.index}`} component="span" sx={{ fontStyle: 'italic' }}>
-            {italicMatch[1]}
-          </Typography>
-        );
-        
-        lastItalicIndex = italicMatch.index + italicMatch[0].length;
-      }
-      
-      // Add remaining text
-      if (lastItalicIndex < element.length) {
-        italicElements.push(element.substring(lastItalicIndex));
-      }
-    } else {
-      // Add non-string elements as is
-      italicElements.push(element);
-    }
-  });
-  
-  // Process the result for underline formatting (__text__)
-  const underlineElements: React.ReactNode[] = [];
-  lastIndex = 0;
-  
-  italicElements.forEach((element, index) => {
-    if (typeof element === 'string') {
-      // Process underline formatting in string elements
-      const underlineRegex = /__(.*?)__/g;
-      let underlineMatch;
-      let lastUnderlineIndex = 0;
-      
-      while ((underlineMatch = underlineRegex.exec(element)) !== null) {
-        // Add text before the match
-        if (underlineMatch.index > lastUnderlineIndex) {
-          underlineElements.push(element.substring(lastUnderlineIndex, underlineMatch.index));
-        }
-        
-        // Add underlined text
-        underlineElements.push(
-          <Typography key={`underline-${index}-${underlineMatch.index}`} component="span" sx={{ textDecoration: 'underline' }}>
-            {underlineMatch[1]}
-          </Typography>
-        );
-        
-        lastUnderlineIndex = underlineMatch.index + underlineMatch[0].length;
-      }
-      
-      // Add remaining text
-      if (lastUnderlineIndex < element.length) {
-        underlineElements.push(element.substring(lastUnderlineIndex));
-      }
-    } else {
-      // Add non-string elements as is
-      underlineElements.push(element);
-    }
-  });
-  
-  // Process the result for inline code formatting (`text`)
-  const codeElements: React.ReactNode[] = [];
-  lastIndex = 0;
-  
-  underlineElements.forEach((element, index) => {
-    if (typeof element === 'string') {
-      // Process code formatting in string elements
-      const codeRegex = /`(.*?)`/g;
-      let codeMatch;
-      let lastCodeIndex = 0;
-      
-      while ((codeMatch = codeRegex.exec(element)) !== null) {
-        // Add text before the match
-        if (codeMatch.index > lastCodeIndex) {
-          codeElements.push(element.substring(lastCodeIndex, codeMatch.index));
-        }
-        
-        // Add code text
-        codeElements.push(
-          <Typography
-            key={`code-${index}-${codeMatch.index}`}
-            component="span"
-            sx={{
-              fontFamily: 'monospace',
-              bgcolor: alpha('#0a4f3c', 0.1),
-              px: 0.5,
-              py: 0.25,
-              borderRadius: 0.5,
-              fontSize: '0.875rem'
-            }}
-          >
-            {codeMatch[1]}
-          </Typography>
-        );
-        
-        lastCodeIndex = codeMatch.index + codeMatch[0].length;
-      }
-      
-      // Add remaining text
-      if (lastCodeIndex < element.length) {
-        codeElements.push(element.substring(lastCodeIndex));
-      }
-    } else {
-      // Add non-string elements as is
-      codeElements.push(element);
-    }
-  });
-  
-  return <>{codeElements}</>;
+// Convert HTML to plain text for word/character count
+const htmlToPlainText = (html: string): string => {
+  const tempDiv = document.createElement('div');
+  tempDiv.innerHTML = html;
+  return tempDiv.textContent || tempDiv.innerText || '';
 };
 
 const ProjectsPage: React.FC = () => {
@@ -444,6 +190,9 @@ const ProjectsPage: React.FC = () => {
     code: false
   });
 
+  // Ref for rich text editor
+  const editorRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     loadProjects();
     loadFilterOptions();
@@ -452,8 +201,9 @@ const ProjectsPage: React.FC = () => {
 
   // Update word and character count when abstract changes
   useEffect(() => {
-    const words = formData.abstract.trim().split(/\s+/).filter(word => word.length > 0).length;
-    const chars = formData.abstract.length;
+    const plainText = htmlToPlainText(formData.abstract);
+    const words = plainText.trim().split(/\s+/).filter(word => word.length > 0).length;
+    const chars = plainText.length;
     setAbstractWordCount(words);
     setAbstractCharCount(chars);
   }, [formData.abstract]);
@@ -587,7 +337,7 @@ const ProjectsPage: React.FC = () => {
         const updatedProject = await adminApi.getProject(selectedProjectForImages.id);
         setSelectedProjectForImages(updatedProject);
         
-        // Update the project in the main list
+        // Update project in main list
         setProjects(prevProjects => 
           prevProjects.map(p => 
             p.id === updatedProject.id ? updatedProject : p
@@ -774,60 +524,24 @@ const ProjectsPage: React.FC = () => {
     }
   };
 
-  // Abstract editing functions
-  const handleAbstractChange = (value: string) => {
-    setFormData(prev => ({ ...prev, abstract: value }));
+  // Rich text editor functions
+  const handleAbstractChange = () => {
+    if (editorRef.current) {
+      const content = editorRef.current.innerHTML;
+      setFormData(prev => ({ ...prev, abstract: content }));
+    }
   };
 
-  const handleFormatToggle = (format: keyof typeof abstractFormats) => {
-    setAbstractFormats(prev => ({
-      ...prev,
-      [format]: !prev[format]
-    }));
-    
-    // Apply formatting to the abstract text
-    // This is a simplified implementation - in a real app, you'd use a proper rich text editor
-    const textarea = document.getElementById('abstract-textarea') as HTMLTextAreaElement;
-    if (textarea) {
-      const start = textarea.selectionStart;
-      const end = textarea.selectionEnd;
-      const selectedText = formData.abstract.substring(start, end);
-      
-      if (selectedText) {
-        let formattedText = selectedText;
-        
-        switch (format) {
-          case 'bold':
-            formattedText = `**${selectedText}**`;
-            break;
-          case 'italic':
-            formattedText = `*${selectedText}*`;
-            break;
-          case 'underline':
-            formattedText = `__${selectedText}__`;
-            break;
-          case 'code':
-            formattedText = `\`${selectedText}\``;
-            break;
-          case 'quote':
-            formattedText = `> ${selectedText}`;
-            break;
-          case 'bulletList':
-            formattedText = `\n• ${selectedText}`;
-            break;
-          case 'numberedList':
-            formattedText = `\n1. ${selectedText}`;
-            break;
-        }
-        
-        const newAbstract = formData.abstract.substring(0, start) + formattedText + formData.abstract.substring(end);
-        handleAbstractChange(newAbstract);
-      }
+  const handleFormatToggle = (command: string, value?: string) => {
+    if (editorRef.current) {
+      editorRef.current.focus();
+      document.execCommand(command, false, value);
+      handleAbstractChange();
     }
   };
 
   const handleSaveAbstractVersion = () => {
-    // Get the author name from form data or use a fallback
+    // Get author name from form data or use a fallback
     const authorName = formData.author_name || 
                       (currentUser as any)?.name || 
                       (currentUser as any)?.username || 
@@ -849,7 +563,10 @@ const ProjectsPage: React.FC = () => {
   };
 
   const handleRestoreAbstractVersion = (version: AbstractHistory) => {
-    handleAbstractChange(version.content);
+    if (editorRef.current) {
+      editorRef.current.innerHTML = version.content;
+      handleAbstractChange();
+    }
     setHistoryMenuAnchor(null);
     setSnackbar({
       open: true,
@@ -1579,7 +1296,7 @@ const ProjectsPage: React.FC = () => {
                       />
                     </Grid>
                     
-                    {/* Enhanced Abstract Section with Rich Editing Features */}
+                    {/* Enhanced Abstract Section with Rich Text Editor */}
                     <Grid item xs={12}>
                       <Paper
                         elevation={0}
@@ -1708,7 +1425,7 @@ const ProjectsPage: React.FC = () => {
                               <Tooltip title="Bullet List">
                                 <IconButton
                                   size="small"
-                                  onClick={() => handleFormatToggle('bulletList')}
+                                  onClick={() => handleFormatToggle('insertUnorderedList')}
                                   sx={{
                                     color: abstractFormats.bulletList ? '#0a4f3c' : 'text.secondary',
                                     bgcolor: abstractFormats.bulletList ? alpha('#0a4f3c', 0.1) : 'transparent',
@@ -1724,7 +1441,7 @@ const ProjectsPage: React.FC = () => {
                               <Tooltip title="Numbered List">
                                 <IconButton
                                   size="small"
-                                  onClick={() => handleFormatToggle('numberedList')}
+                                  onClick={() => handleFormatToggle('insertOrderedList')}
                                   sx={{
                                     color: abstractFormats.numberedList ? '#0a4f3c' : 'text.secondary',
                                     bgcolor: abstractFormats.numberedList ? alpha('#0a4f3c', 0.1) : 'transparent',
@@ -1740,7 +1457,7 @@ const ProjectsPage: React.FC = () => {
                               <Tooltip title="Quote">
                                 <IconButton
                                   size="small"
-                                  onClick={() => handleFormatToggle('quote')}
+                                  onClick={() => handleFormatToggle('formatBlock', 'blockquote')}
                                   sx={{
                                     color: abstractFormats.quote ? '#0a4f3c' : 'text.secondary',
                                     bgcolor: abstractFormats.quote ? alpha('#0a4f3c', 0.1) : 'transparent',
@@ -1756,7 +1473,7 @@ const ProjectsPage: React.FC = () => {
                               <Tooltip title="Code">
                                 <IconButton
                                   size="small"
-                                  onClick={() => handleFormatToggle('code')}
+                                  onClick={() => handleFormatToggle('formatBlock', 'pre')}
                                   sx={{
                                     color: abstractFormats.code ? '#0a4f3c' : 'text.secondary',
                                     bgcolor: abstractFormats.code ? alpha('#0a4f3c', 0.1) : 'transparent',
@@ -1842,25 +1559,68 @@ const ProjectsPage: React.FC = () => {
                               </Menu>
                             </Toolbar>
                             
-                            {/* Text Editor */}
-                            <TextField
-                              id="abstract-textarea"
-                              fullWidth
-                              multiline
-                              rows={abstractFullscreen ? 15 : 4}
-                              variant="outlined"
-                              value={formData.abstract}
-                              onChange={(e) => handleAbstractChange(e.target.value)}
-                              placeholder="Provide a detailed abstract of the research project..."
+                            {/* Rich Text Editor */}
+                            <Box
+                              ref={editorRef}
+                              contentEditable
+                              onInput={handleAbstractChange}
+                              dangerouslySetInnerHTML={{ __html: formData.abstract }}
                               sx={{
-                                '& .MuiOutlinedInput-root': {
-                                  borderRadius: 3,
-                                  '&.Mui-focused fieldset': {
-                                    borderColor: '#0a4f3c',
-                                  },
+                                minHeight: abstractFullscreen ? 400 : 150,
+                                maxHeight: abstractFullscreen ? 'calc(90vh - 200px)' : 300,
+                                overflow: 'auto',
+                                p: 2,
+                                border: '1px solid rgba(0,0,0,0.23)',
+                                borderRadius: 3,
+                                '&:focus': {
+                                  outline: 'none',
+                                  borderColor: '#0a4f3c',
+                                  borderWidth: 2,
                                 },
-                                '& .MuiInputLabel-root.Mui-focused': {
-                                  color: '#0a4f3c',
+                                '&:hover': {
+                                  borderColor: '#2a9d7f',
+                                },
+                                fontSize: '1rem',
+                                lineHeight: 1.6,
+                                fontFamily: 'inherit',
+                                '& blockquote': {
+                                  borderLeft: '3px solid #0a4f3c',
+                                  paddingLeft: 2,
+                                  fontStyle: 'italic',
+                                  color: 'text.secondary',
+                                  margin: '8px 0',
+                                },
+                                '& ul, & ol': {
+                                  marginLeft: 2,
+                                  marginBottom: 1,
+                                },
+                                '& li': {
+                                  marginBottom: 0.5,
+                                },
+                                '& pre': {
+                                  backgroundColor: alpha('#0a4f3c', 0.05),
+                                  padding: 2,
+                                  borderRadius: 1,
+                                  fontFamily: 'monospace',
+                                  fontSize: '0.875rem',
+                                  overflow: 'auto',
+                                  margin: '8px 0',
+                                },
+                                '& strong': {
+                                  fontWeight: 'bold',
+                                },
+                                '& em': {
+                                  fontStyle: 'italic',
+                                },
+                                '& u': {
+                                  textDecoration: 'underline',
+                                },
+                                '& code': {
+                                  fontFamily: 'monospace',
+                                  backgroundColor: alpha('#0a4f3c', 0.1),
+                                  padding: '2px 4px',
+                                  borderRadius: 0.5,
+                                  fontSize: '0.875rem',
                                 },
                               }}
                             />
@@ -1888,15 +1648,8 @@ const ProjectsPage: React.FC = () => {
                               maxHeight: abstractFullscreen ? 'calc(90vh - 200px)' : 300,
                               overflow: 'auto'
                             }}
-                          >
-                            {formData.abstract ? (
-                              parseMarkdown(formData.abstract)
-                            ) : (
-                              <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
-                                No abstract content to preview
-                              </Typography>
-                            )}
-                          </Box>
+                            dangerouslySetInnerHTML={{ __html: formData.abstract }}
+                          />
                         )}
                       </Paper>
                     </Grid>
