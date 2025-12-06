@@ -40,7 +40,13 @@ import {
   Tabs,
   Tab,
   Badge,
-  Snackbar
+  Snackbar,
+  Toolbar,
+  ToggleButton,
+  ToggleButtonGroup,
+  Menu,
+  ListItemIcon,
+  ListItemText
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -60,7 +66,22 @@ import {
   FilterList as FilterIcon,
   Close as CloseIcon,
   Image as ImageIcon,
-  Refresh as RefreshIcon
+  Refresh as RefreshIcon,
+  FormatBold as BoldIcon,
+  FormatItalic as ItalicIcon,
+  FormatUnderlined as UnderlinedIcon,
+  FormatListBulleted as BulletListIcon,
+  FormatListNumbered as NumberedListIcon,
+  FormatQuote as QuoteIcon,
+  Code as CodeIcon,
+  Preview as PreviewIcon,
+  EditNote as EditNoteIcon,
+  Save as SaveIcon,
+  Undo as UndoIcon,
+  Redo as RedoIcon,
+  History as HistoryIcon,
+  Fullscreen as FullscreenIcon,
+  FullscreenExit as FullscreenExitIcon
 } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
 import { adminApi } from '../services/adminApi';
@@ -83,6 +104,13 @@ interface ProjectFormData {
   author_email: string;
   is_published: boolean;
   file?: File;
+}
+
+interface AbstractHistory {
+  id: string;
+  content: string;
+  timestamp: Date;
+  author: string;
 }
 
 const ProjectsPage: React.FC = () => {
@@ -138,11 +166,36 @@ const ProjectsPage: React.FC = () => {
   const [selectedProjectForImages, setSelectedProjectForImages] = useState<Project | null>(null);
   const [imageUpdateTrigger, setImageUpdateTrigger] = useState(0);
 
+  // Abstract editing states
+  const [abstractMode, setAbstractMode] = useState<'edit' | 'preview'>('edit');
+  const [abstractFullscreen, setAbstractFullscreen] = useState(false);
+  const [abstractHistory, setAbstractHistory] = useState<AbstractHistory[]>([]);
+  const [historyMenuAnchor, setHistoryMenuAnchor] = useState<null | HTMLElement>(null);
+  const [abstractWordCount, setAbstractWordCount] = useState(0);
+  const [abstractCharCount, setAbstractCharCount] = useState(0);
+  const [abstractFormats, setAbstractFormats] = useState({
+    bold: false,
+    italic: false,
+    underline: false,
+    bulletList: false,
+    numberedList: false,
+    quote: false,
+    code: false
+  });
+
   useEffect(() => {
     loadProjects();
     loadFilterOptions();
     fetchFormConstants();
   }, [searchTerm, filterPublished]);
+
+  // Update word and character count when abstract changes
+  useEffect(() => {
+    const words = formData.abstract.trim().split(/\s+/).filter(word => word.length > 0).length;
+    const chars = formData.abstract.length;
+    setAbstractWordCount(words);
+    setAbstractCharCount(chars);
+  }, [formData.abstract]);
 
   const fetchFormConstants = async () => {
     try {
@@ -197,6 +250,16 @@ const ProjectsPage: React.FC = () => {
         author_email: project.author_email || '',
         is_published: project.is_published,
       });
+      
+      // Initialize abstract history if editing an existing project
+      if (project.abstract) {
+        setAbstractHistory([{
+          id: 'current',
+          content: project.abstract,
+          timestamp: new Date(),
+          author: project.author_name
+        }]);
+      }
     } else {
       setEditingProject(null);
       setFormData({
@@ -213,9 +276,12 @@ const ProjectsPage: React.FC = () => {
         author_email: '',
         is_published: true,
       });
+      setAbstractHistory([]);
     }
     setFormError('');
     setActiveTab('basic');
+    setAbstractMode('edit');
+    setAbstractFullscreen(false);
     setOpenDialog(true);
   };
 
@@ -228,6 +294,9 @@ const ProjectsPage: React.FC = () => {
       custom_research_area: '',
       custom_degree_type: ''
     });
+    setAbstractHistory([]);
+    setAbstractMode('edit');
+    setAbstractFullscreen(false);
   };
 
   // Enhanced function with real-time updates
@@ -442,6 +511,84 @@ const ProjectsPage: React.FC = () => {
         [field]: event.target.value
       }));
     }
+  };
+
+  // Abstract editing functions
+  const handleAbstractChange = (value: string) => {
+    setFormData(prev => ({ ...prev, abstract: value }));
+  };
+
+  const handleFormatToggle = (format: keyof typeof abstractFormats) => {
+    setAbstractFormats(prev => ({
+      ...prev,
+      [format]: !prev[format]
+    }));
+    
+    // Apply formatting to the abstract text
+    // This is a simplified implementation - in a real app, you'd use a proper rich text editor
+    const textarea = document.getElementById('abstract-textarea') as HTMLTextAreaElement;
+    if (textarea) {
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const selectedText = formData.abstract.substring(start, end);
+      
+      if (selectedText) {
+        let formattedText = selectedText;
+        
+        switch (format) {
+          case 'bold':
+            formattedText = `**${selectedText}**`;
+            break;
+          case 'italic':
+            formattedText = `*${selectedText}*`;
+            break;
+          case 'underline':
+            formattedText = `__${selectedText}__`;
+            break;
+          case 'code':
+            formattedText = `\`${selectedText}\``;
+            break;
+          case 'quote':
+            formattedText = `> ${selectedText}`;
+            break;
+          case 'bulletList':
+            formattedText = `\n• ${selectedText}`;
+            break;
+          case 'numberedList':
+            formattedText = `\n1. ${selectedText}`;
+            break;
+        }
+        
+        const newAbstract = formData.abstract.substring(0, start) + formattedText + formData.abstract.substring(end);
+        handleAbstractChange(newAbstract);
+      }
+    }
+  };
+
+  const handleSaveAbstractVersion = () => {
+    const newVersion: AbstractHistory = {
+      id: Date.now().toString(),
+      content: formData.abstract,
+      timestamp: new Date(),
+      author: currentUser?.name || 'Unknown'
+    };
+    
+    setAbstractHistory(prev => [newVersion, ...prev]);
+    setSnackbar({
+      open: true,
+      message: 'Abstract version saved',
+      severity: 'success'
+    });
+  };
+
+  const handleRestoreAbstractVersion = (version: AbstractHistory) => {
+    handleAbstractChange(version.content);
+    setHistoryMenuAnchor(null);
+    setSnackbar({
+      open: true,
+      message: 'Abstract version restored',
+      severity: 'info'
+    });
   };
 
   const handleSearch = () => {
@@ -1165,28 +1312,328 @@ const ProjectsPage: React.FC = () => {
                       />
                     </Grid>
                     
+                    {/* Enhanced Abstract Section with Rich Editing Features */}
                     <Grid item xs={12}>
-                      <TextField
-                        label="Abstract"
-                        fullWidth
-                        multiline
-                        rows={4}
-                        variant="outlined"
-                        value={formData.abstract}
-                        onChange={handleInputChange('abstract')}
-                        placeholder="Provide a detailed abstract of the research project..."
+                      <Paper
+                        elevation={0}
                         sx={{
-                          '& .MuiOutlinedInput-root': {
-                            borderRadius: 3,
-                            '&.Mui-focused fieldset': {
-                              borderColor: '#0a4f3c',
-                            },
-                          },
-                          '& .MuiInputLabel-root.Mui-focused': {
-                            color: '#0a4f3c',
-                          },
+                          p: 2,
+                          borderRadius: 3,
+                          border: '1px solid rgba(0,0,0,0.08)',
+                          bgcolor: 'white'
                         }}
-                      />
+                      >
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                          <Typography variant="subtitle1" sx={{ fontWeight: 600, color: '#0a4f3c' }}>
+                            Abstract
+                          </Typography>
+                          <Box sx={{ display: 'flex', gap: 1 }}>
+                            <ToggleButtonGroup
+                              value={abstractMode}
+                              exclusive
+                              onChange={(_, newMode) => newMode && setAbstractMode(newMode)}
+                              size="small"
+                              sx={{
+                                '& .MuiToggleButton-root': {
+                                  borderRadius: 2,
+                                  px: 2,
+                                  py: 0.5,
+                                  '&.Mui-selected': {
+                                    bgcolor: alpha('#0a4f3c', 0.1),
+                                    color: '#0a4f3c',
+                                  },
+                                },
+                              }}
+                            >
+                              <ToggleButton value="edit" aria-label="edit mode">
+                                <EditNoteIcon fontSize="small" />
+                              </ToggleButton>
+                              <ToggleButton value="preview" aria-label="preview mode">
+                                <PreviewIcon fontSize="small" />
+                              </ToggleButton>
+                            </ToggleButtonGroup>
+                            
+                            <Tooltip title={abstractFullscreen ? "Exit Fullscreen" : "Fullscreen"}>
+                              <IconButton
+                                size="small"
+                                onClick={() => setAbstractFullscreen(!abstractFullscreen)}
+                                sx={{
+                                  bgcolor: alpha('#0a4f3c', 0.1),
+                                  color: '#0a4f3c',
+                                  '&:hover': {
+                                    bgcolor: alpha('#0a4f3c', 0.2)
+                                  }
+                                }}
+                              >
+                                {abstractFullscreen ? <FullscreenExitIcon /> : <FullscreenIcon />}
+                              </IconButton>
+                            </Tooltip>
+                          </Box>
+                        </Box>
+                        
+                        {abstractMode === 'edit' && (
+                          <>
+                            {/* Formatting Toolbar */}
+                            <Toolbar
+                              variant="dense"
+                              sx={{
+                                bgcolor: alpha('#0a4f3c', 0.05),
+                                borderRadius: 2,
+                                mb: 1,
+                                minHeight: 'auto',
+                                px: 1,
+                                py: 0.5,
+                                display: 'flex',
+                                gap: 0.5,
+                                flexWrap: 'wrap'
+                              }}
+                            >
+                              <Tooltip title="Bold">
+                                <IconButton
+                                  size="small"
+                                  onClick={() => handleFormatToggle('bold')}
+                                  sx={{
+                                    color: abstractFormats.bold ? '#0a4f3c' : 'text.secondary',
+                                    bgcolor: abstractFormats.bold ? alpha('#0a4f3c', 0.1) : 'transparent',
+                                    '&:hover': {
+                                      bgcolor: alpha('#0a4f3c', 0.1)
+                                    }
+                                  }}
+                                >
+                                  <BoldIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                              
+                              <Tooltip title="Italic">
+                                <IconButton
+                                  size="small"
+                                  onClick={() => handleFormatToggle('italic')}
+                                  sx={{
+                                    color: abstractFormats.italic ? '#0a4f3c' : 'text.secondary',
+                                    bgcolor: abstractFormats.italic ? alpha('#0a4f3c', 0.1) : 'transparent',
+                                    '&:hover': {
+                                      bgcolor: alpha('#0a4f3c', 0.1)
+                                    }
+                                  }}
+                                >
+                                  <ItalicIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                              
+                              <Tooltip title="Underline">
+                                <IconButton
+                                  size="small"
+                                  onClick={() => handleFormatToggle('underline')}
+                                  sx={{
+                                    color: abstractFormats.underline ? '#0a4f3c' : 'text.secondary',
+                                    bgcolor: abstractFormats.underline ? alpha('#0a4f3c', 0.1) : 'transparent',
+                                    '&:hover': {
+                                      bgcolor: alpha('#0a4f3c', 0.1)
+                                    }
+                                  }}
+                                >
+                                  <UnderlinedIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                              
+                              <Divider orientation="vertical" flexItem />
+                              
+                              <Tooltip title="Bullet List">
+                                <IconButton
+                                  size="small"
+                                  onClick={() => handleFormatToggle('bulletList')}
+                                  sx={{
+                                    color: abstractFormats.bulletList ? '#0a4f3c' : 'text.secondary',
+                                    bgcolor: abstractFormats.bulletList ? alpha('#0a4f3c', 0.1) : 'transparent',
+                                    '&:hover': {
+                                      bgcolor: alpha('#0a4f3c', 0.1)
+                                    }
+                                  }}
+                                >
+                                  <BulletListIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                              
+                              <Tooltip title="Numbered List">
+                                <IconButton
+                                  size="small"
+                                  onClick={() => handleFormatToggle('numberedList')}
+                                  sx={{
+                                    color: abstractFormats.numberedList ? '#0a4f3c' : 'text.secondary',
+                                    bgcolor: abstractFormats.numberedList ? alpha('#0a4f3c', 0.1) : 'transparent',
+                                    '&:hover': {
+                                      bgcolor: alpha('#0a4f3c', 0.1)
+                                    }
+                                  }}
+                                >
+                                  <NumberedListIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                              
+                              <Tooltip title="Quote">
+                                <IconButton
+                                  size="small"
+                                  onClick={() => handleFormatToggle('quote')}
+                                  sx={{
+                                    color: abstractFormats.quote ? '#0a4f3c' : 'text.secondary',
+                                    bgcolor: abstractFormats.quote ? alpha('#0a4f3c', 0.1) : 'transparent',
+                                    '&:hover': {
+                                      bgcolor: alpha('#0a4f3c', 0.1)
+                                    }
+                                  }}
+                                >
+                                  <QuoteIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                              
+                              <Tooltip title="Code">
+                                <IconButton
+                                  size="small"
+                                  onClick={() => handleFormatToggle('code')}
+                                  sx={{
+                                    color: abstractFormats.code ? '#0a4f3c' : 'text.secondary',
+                                    bgcolor: abstractFormats.code ? alpha('#0a4f3c', 0.1) : 'transparent',
+                                    '&:hover': {
+                                      bgcolor: alpha('#0a4f3c', 0.1)
+                                    }
+                                  }}
+                                >
+                                  <CodeIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                              
+                              <Divider orientation="vertical" flexItem />
+                              
+                              <Tooltip title="Save Version">
+                                <IconButton
+                                  size="small"
+                                  onClick={handleSaveAbstractVersion}
+                                  sx={{
+                                    color: '#0a4f3c',
+                                    '&:hover': {
+                                      bgcolor: alpha('#0a4f3c', 0.1)
+                                    }
+                                  }}
+                                >
+                                  <SaveIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                              
+                              <Tooltip title="Version History">
+                                <IconButton
+                                  size="small"
+                                  onClick={(e) => setHistoryMenuAnchor(e.currentTarget)}
+                                  sx={{
+                                    color: '#0a4f3c',
+                                    '&:hover': {
+                                      bgcolor: alpha('#0a4f3c', 0.1)
+                                    }
+                                  }}
+                                >
+                                  <HistoryIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                              
+                              <Menu
+                                anchorEl={historyMenuAnchor}
+                                open={Boolean(historyMenuAnchor)}
+                                onClose={() => setHistoryMenuAnchor(null)}
+                                PaperProps={{
+                                  sx: {
+                                    maxHeight: 300,
+                                    width: '100%',
+                                    borderRadius: 2,
+                                    border: '1px solid rgba(0,0,0,0.08)',
+                                  }
+                                }}
+                              >
+                                {abstractHistory.length === 0 ? (
+                                  <MenuItem disabled>
+                                    <ListItemText primary="No saved versions" />
+                                  </MenuItem>
+                                ) : (
+                                  abstractHistory.map((version) => (
+                                    <MenuItem
+                                      key={version.id}
+                                      onClick={() => handleRestoreAbstractVersion(version)}
+                                      sx={{
+                                        '&:hover': {
+                                          bgcolor: alpha('#0a4f3c', 0.05)
+                                        }
+                                      }}
+                                    >
+                                      <ListItemIcon>
+                                        <HistoryIcon fontSize="small" />
+                                      </ListItemIcon>
+                                      <ListItemText
+                                        primary={`${version.timestamp.toLocaleDateString()} ${version.timestamp.toLocaleTimeString()}`}
+                                        secondary={`by ${version.author}`}
+                                      />
+                                    </MenuItem>
+                                  ))
+                                )}
+                              </Menu>
+                            </Toolbar>
+                            
+                            {/* Text Editor */}
+                            <TextField
+                              id="abstract-textarea"
+                              fullWidth
+                              multiline
+                              rows={abstractFullscreen ? 15 : 4}
+                              variant="outlined"
+                              value={formData.abstract}
+                              onChange={(e) => handleAbstractChange(e.target.value)}
+                              placeholder="Provide a detailed abstract of the research project..."
+                              sx={{
+                                '& .MuiOutlinedInput-root': {
+                                  borderRadius: 3,
+                                  '&.Mui-focused fieldset': {
+                                    borderColor: '#0a4f3c',
+                                  },
+                                },
+                                '& .MuiInputLabel-root.Mui-focused': {
+                                  color: '#0a4f3c',
+                                },
+                              }}
+                            />
+                            
+                            {/* Character and Word Count */}
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1 }}>
+                              <Typography variant="caption" color="text.secondary">
+                                Words: {abstractWordCount} | Characters: {abstractCharCount}
+                              </Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                Recommended: 150-300 words
+                              </Typography>
+                            </Box>
+                          </>
+                        )}
+                        
+                        {abstractMode === 'preview' && (
+                          <Box
+                            sx={{
+                              p: 2,
+                              borderRadius: 3,
+                              border: '1px solid rgba(0,0,0,0.08)',
+                              bgcolor: 'white',
+                              minHeight: abstractFullscreen ? 400 : 150,
+                              maxHeight: abstractFullscreen ? 'calc(90vh - 200px)' : 300,
+                              overflow: 'auto'
+                            }}
+                          >
+                            {formData.abstract ? (
+                              <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap' }}>
+                                {formData.abstract}
+                              </Typography>
+                            ) : (
+                              <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                                No abstract content to preview
+                              </Typography>
+                            )}
+                          </Box>
+                        )}
+                      </Paper>
                     </Grid>
                     
                     <Grid item xs={12}>
