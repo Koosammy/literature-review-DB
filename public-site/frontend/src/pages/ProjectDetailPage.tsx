@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import {
   Box,
   Container,
@@ -931,7 +932,7 @@ const ImageGallery: React.FC<{
 
 // New Rich Text Renderer Component
 const RichTextRenderer: React.FC<{ content: string }> = ({ content }) => {
-  if (!content) return null;
+  if (!content) return null;  
   
   return (
     <Typography 
