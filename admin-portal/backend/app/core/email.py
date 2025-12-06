@@ -4,7 +4,7 @@ import secrets
 import string
 import logging
 import os
-import ssl
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +21,11 @@ MAIL_SERVER = os.getenv("MAIL_SERVER", "smtp.gmail.com")
 MAIL_PORT = int(os.getenv("MAIL_PORT", "587"))
 FRONTEND_URL = os.getenv("FRONTEND_URL", "https://research-hub-admin-portal.onrender.com")
 
-# Log configuration (hide password)
+# Timeout settings (in seconds)
+SMTP_TIMEOUT = int(os.getenv("SMTP_TIMEOUT", "480"))  # Increased to 120 seconds
+SMTP_RETRIES = int(os.getenv("SMTP_RETRIES", "3"))    # Number of retry attempts
+
+# Log configuration
 logger.info("=" * 50)
 logger.info("Email Configuration:")
 logger.info(f"  MAIL_USERNAME: {MAIL_USERNAME if MAIL_USERNAME else 'NOT SET'}")
@@ -29,6 +33,8 @@ logger.info(f"  MAIL_PASSWORD: {'SET (' + str(len(MAIL_PASSWORD)) + ' chars)' if
 logger.info(f"  MAIL_FROM: {MAIL_FROM if MAIL_FROM else 'NOT SET'}")
 logger.info(f"  MAIL_SERVER: {MAIL_SERVER}")
 logger.info(f"  MAIL_PORT: {MAIL_PORT}")
+logger.info(f"  SMTP_TIMEOUT: {SMTP_TIMEOUT}s")
+logger.info(f"  SMTP_RETRIES: {SMTP_RETRIES}")
 logger.info(f"  FRONTEND_URL: {FRONTEND_URL}")
 logger.info("=" * 50)
 
@@ -38,15 +44,15 @@ EMAIL_CONFIGURED = bool(MAIL_USERNAME and MAIL_PASSWORD)
 if not EMAIL_CONFIGURED:
     logger.error("⚠️ EMAIL NOT CONFIGURED!")
     logger.error("Please set MAIL_USERNAME and MAIL_PASSWORD environment variables")
-    logger.error("For Gmail, you need an App Password (not your regular password)")
 
 
 async def send_email_smtp(
     to_email: str,
     subject: str,
-    html_body: str
+    html_body: str,
+    retries: int = SMTP_RETRIES
 ) -> bool:
-    """Send email using aiosmtplib directly"""
+    """Send email using aiosmtplib with retry logic and increased timeout"""
     import aiosmtplib
     from email.mime.text import MIMEText
     from email.mime.multipart import MIMEMultipart
@@ -55,60 +61,133 @@ async def send_email_smtp(
         logger.error("Cannot send email - credentials not configured")
         return False
     
-    try:
-        logger.info(f"Preparing to send email to: {to_email}")
-        logger.info(f"Using SMTP server: {MAIL_SERVER}:{MAIL_PORT}")
+    last_error = None
+    
+    for attempt in range(1, retries + 1):
+        try:
+            logger.info(f"📧 Attempt {attempt}/{retries}: Sending email to {to_email}")
+            logger.info(f"   Server: {MAIL_SERVER}:{MAIL_PORT}, Timeout: {SMTP_TIMEOUT}s")
+            
+            # Create message
+            message = MIMEMultipart("alternative")
+            message["From"] = f"UHAS Research Hub <{MAIL_FROM}>"
+            message["To"] = to_email
+            message["Subject"] = subject
+            
+            # Attach HTML body
+            html_part = MIMEText(html_body, "html")
+            message.attach(html_part)
+            
+            # Method 1: Using send() function directly (simpler, often more reliable)
+            logger.info(f"   Connecting to SMTP server...")
+            
+            await aiosmtplib.send(
+                message,
+                hostname=MAIL_SERVER,
+                port=MAIL_PORT,
+                username=MAIL_USERNAME,
+                password=MAIL_PASSWORD,
+                start_tls=True,
+                timeout=SMTP_TIMEOUT
+            )
+            
+            logger.info(f"✅ Email sent successfully to {to_email} on attempt {attempt}")
+            return True
+            
+        except asyncio.TimeoutError as e:
+            last_error = f"Connection timed out after {SMTP_TIMEOUT}s"
+            logger.warning(f"⏱️ Attempt {attempt} timed out: {last_error}")
+            
+        except aiosmtplib.SMTPConnectError as e:
+            last_error = f"Connection failed: {e}"
+            logger.warning(f"🔌 Attempt {attempt} connection failed: {e}")
+            
+        except aiosmtplib.SMTPAuthenticationError as e:
+            last_error = f"Authentication failed: {e}"
+            logger.error(f"🔐 Authentication failed: {e}")
+            logger.error("   Check MAIL_USERNAME and MAIL_PASSWORD")
+            logger.error("   For Gmail, use App Password (not regular password)")
+            # Don't retry on auth errors
+            break
+            
+        except aiosmtplib.SMTPException as e:
+            last_error = f"SMTP error: {e}"
+            logger.warning(f"📧 Attempt {attempt} SMTP error: {e}")
+            
+        except Exception as e:
+            last_error = f"{type(e).__name__}: {e}"
+            logger.warning(f"❌ Attempt {attempt} unexpected error: {last_error}")
         
-        # Create message
+        # Wait before retry (exponential backoff)
+        if attempt < retries:
+            wait_time = attempt * 2  # 2s, 4s, 6s...
+            logger.info(f"   Waiting {wait_time}s before retry...")
+            await asyncio.sleep(wait_time)
+    
+    logger.error(f"❌ All {retries} attempts failed. Last error: {last_error}")
+    return False
+
+
+async def send_email_smtp_alternative(
+    to_email: str,
+    subject: str,
+    html_body: str
+) -> bool:
+    """Alternative method using SSL/TLS on port 465"""
+    import aiosmtplib
+    from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
+    
+    if not EMAIL_CONFIGURED:
+        return False
+    
+    try:
+        logger.info(f"📧 Trying alternative SSL method (port 465)...")
+        
         message = MIMEMultipart("alternative")
         message["From"] = f"UHAS Research Hub <{MAIL_FROM}>"
         message["To"] = to_email
         message["Subject"] = subject
+        message.attach(MIMEText(html_body, "html"))
         
-        # Attach HTML body
-        html_part = MIMEText(html_body, "html")
-        message.attach(html_part)
-        
-        logger.info("Connecting to SMTP server...")
-        
-        # Create SMTP client and send
-        smtp_client = aiosmtplib.SMTP(
+        # Use SSL directly on port 465
+        await aiosmtplib.send(
+            message,
             hostname=MAIL_SERVER,
-            port=MAIL_PORT,
-            use_tls=False,  # We'll use STARTTLS
-            start_tls=True,
+            port=465,
             username=MAIL_USERNAME,
             password=MAIL_PASSWORD,
-            timeout=30
+            use_tls=True,  # Direct TLS connection
+            timeout=SMTP_TIMEOUT
         )
         
-        async with smtp_client:
-            logger.info("Connected! Sending message...")
-            await smtp_client.send_message(message)
-        
-        logger.info(f"✅ Email sent successfully to {to_email}")
+        logger.info(f"✅ Email sent via SSL (port 465) to {to_email}")
         return True
         
-    except aiosmtplib.SMTPAuthenticationError as e:
-        logger.error(f"❌ SMTP Authentication Failed: {e}")
-        logger.error("Check your MAIL_USERNAME and MAIL_PASSWORD")
-        logger.error("For Gmail, make sure you're using an App Password")
-        return False
-        
-    except aiosmtplib.SMTPConnectError as e:
-        logger.error(f"❌ SMTP Connection Failed: {e}")
-        logger.error(f"Cannot connect to {MAIL_SERVER}:{MAIL_PORT}")
-        return False
-        
-    except aiosmtplib.SMTPException as e:
-        logger.error(f"❌ SMTP Error: {type(e).__name__}: {e}")
-        return False
-        
     except Exception as e:
-        logger.error(f"❌ Unexpected error sending email: {type(e).__name__}: {e}")
-        import traceback
-        logger.error(traceback.format_exc())
+        logger.error(f"❌ SSL method also failed: {e}")
         return False
+
+
+async def send_email_with_fallback(
+    to_email: str,
+    subject: str,
+    html_body: str
+) -> bool:
+    """Try multiple methods to send email"""
+    
+    # Method 1: STARTTLS on port 587
+    logger.info("Trying Method 1: STARTTLS on port 587...")
+    if await send_email_smtp(to_email, subject, html_body):
+        return True
+    
+    # Method 2: Direct SSL on port 465
+    logger.info("Trying Method 2: Direct SSL on port 465...")
+    if await send_email_smtp_alternative(to_email, subject, html_body):
+        return True
+    
+    logger.error(f"❌ All email methods failed for {to_email}")
+    return False
 
 
 async def send_password_reset_email(email: EmailStr, username: str, reset_url: str) -> bool:
@@ -178,7 +257,7 @@ async def send_password_reset_email(email: EmailStr, username: str, reset_url: s
     </html>
     """
     
-    success = await send_email_smtp(
+    success = await send_email_with_fallback(
         to_email=email,
         subject="🔐 Password Reset Request - UHAS Research Hub",
         html_body=html
@@ -226,7 +305,7 @@ async def send_password_reset_confirmation(email: EmailStr, username: str) -> bo
     </html>
     """
     
-    return await send_email_smtp(
+    return await send_email_with_fallback(
         to_email=email,
         subject="✅ Password Reset Successful - UHAS Research Hub",
         html_body=html
@@ -247,36 +326,45 @@ async def test_email_connection() -> dict:
         "configured": EMAIL_CONFIGURED,
         "server": MAIL_SERVER,
         "port": MAIL_PORT,
-        "username": MAIL_USERNAME,
-        "connection": False,
-        "auth": False,
-        "error": None
+        "username": MAIL_USERNAME[:3] + "***" if MAIL_USERNAME else None,
+        "timeout": SMTP_TIMEOUT,
+        "tests": {}
     }
     
     if not EMAIL_CONFIGURED:
         result["error"] = "Email credentials not configured"
         return result
     
+    # Test 1: STARTTLS on 587
     try:
+        logger.info("Testing STARTTLS connection on port 587...")
         smtp = aiosmtplib.SMTP(
             hostname=MAIL_SERVER,
-            port=MAIL_PORT,
-            use_tls=False,
-            start_tls=True,
-            timeout=10
+            port=587,
+            timeout=30
         )
-        
         await smtp.connect()
-        result["connection"] = True
-        
+        await smtp.starttls()
         await smtp.login(MAIL_USERNAME, MAIL_PASSWORD)
-        result["auth"] = True
-        
         await smtp.quit()
-        
-    except aiosmtplib.SMTPAuthenticationError as e:
-        result["error"] = f"Authentication failed: {str(e)}"
+        result["tests"]["starttls_587"] = "✅ Success"
     except Exception as e:
-        result["error"] = f"{type(e).__name__}: {str(e)}"
+        result["tests"]["starttls_587"] = f"❌ {type(e).__name__}: {str(e)[:50]}"
+    
+    # Test 2: Direct SSL on 465
+    try:
+        logger.info("Testing SSL connection on port 465...")
+        smtp = aiosmtplib.SMTP(
+            hostname=MAIL_SERVER,
+            port=465,
+            use_tls=True,
+            timeout=30
+        )
+        await smtp.connect()
+        await smtp.login(MAIL_USERNAME, MAIL_PASSWORD)
+        await smtp.quit()
+        result["tests"]["ssl_465"] = "✅ Success"
+    except Exception as e:
+        result["tests"]["ssl_465"] = f"❌ {type(e).__name__}: {str(e)[:50]}"
     
     return result
