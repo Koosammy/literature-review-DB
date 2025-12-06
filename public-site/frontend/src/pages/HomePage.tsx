@@ -45,6 +45,7 @@ import { apiService } from '../services/api';
 import { ProjectSummary, SiteStats } from '../types';
 import SEOHead from '../components/SEOHead';
 import { motion } from 'framer-motion';
+import { alpha } from '@mui/material/styles';
 
 // Animation variants
 const fadeInUp = {
@@ -59,6 +60,113 @@ const staggerContainer = {
       staggerChildren: 0.1
     }
   }
+};
+
+// Rich Text Renderer Component - Copied from ProjectDetailPage
+const RichTextRenderer: React.FC<{ content: string }> = ({ content }) => {
+  if (!content) return null;  
+  
+  return (
+    <Typography 
+      variant="body1" 
+      component="div"
+      sx={{ 
+        lineHeight: 1.8,
+        textAlign: 'justify',
+        color: '#2e7d32',
+        fontSize: { xs: '0.95rem', sm: '1rem' },
+        '& strong': {
+          fontWeight: 'bold',
+          color: '#1b5e20',
+        },
+        '& em': {
+          fontStyle: 'italic',
+          color: '#1b5e20',
+        },
+        '& u': {
+          textDecoration: 'underline',
+          color: '#1b5e20',
+        },
+        '& blockquote': {
+          borderLeft: '3px solid #1b5e20',
+          paddingLeft: 2,
+          fontStyle: 'italic',
+          color: '#2e7d32',
+          margin: '16px 0',
+          backgroundColor: alpha('#1b5e20', 0.05),
+          padding: '12px 16px',
+          borderRadius: 2,
+        },
+        '& ul': {
+          paddingLeft: 2,
+          marginBottom: 1,
+          '& li': {
+            marginBottom: 0.5,
+            paddingLeft: 1,
+            position: 'relative',
+            '&:before': {
+              content: '"•"',
+              color: '#1b5e20',
+              fontWeight: 'bold',
+              position: 'absolute',
+              left: -16,
+            }
+          }
+        },
+        '& ol': {
+          paddingLeft: 2,
+          marginBottom: 1,
+          counterReset: 'item',
+          '& li': {
+            marginBottom: 0.5,
+            paddingLeft: 1,
+            position: 'relative',
+            counterIncrement: 'item',
+            '&:before': {
+              content: 'counter(item) "."',
+              color: '#1b5e20',
+              fontWeight: 'bold',
+              position: 'absolute',
+              left: -16,
+            }
+          }
+        },
+        '& pre': {
+          backgroundColor: alpha('#1b5e20', 0.05),
+          padding: 2,
+          borderRadius: 1,
+          fontFamily: 'monospace',
+          fontSize: '0.875rem',
+          overflow: 'auto',
+          margin: '16px 0',
+          border: '1px solid #c8e6c9',
+        },
+        '& code': {
+          fontFamily: 'monospace',
+          backgroundColor: alpha('#1b5e20', 0.1),
+          padding: '2px 4px',
+          borderRadius: 0.5,
+          fontSize: '0.875rem',
+        },
+        '& p': {
+          marginBottom: 1,
+        },
+        '& h1, & h2, & h3, & h4, & h5, & h6': {
+          color: '#1b5e20',
+          marginBottom: 1,
+          marginTop: 1.5,
+        },
+        '& a': {
+          color: '#2e7d32',
+          textDecoration: 'underline',
+          '&:hover': {
+            color: '#1b5e20',
+          }
+        }
+      }}
+      dangerouslySetInnerHTML={{ __html: content }}
+    />
+  );
 };
 
 const HomePage: React.FC = () => {
@@ -1115,21 +1223,30 @@ const HomePage: React.FC = () => {
                           {project.title}
                         </Typography>
 
-                        <Typography
-                          variant="body2"
-                          sx={{
-                            color: 'text.secondary',
-                            mb: { xs: 2, sm: 3 },
+                        {/* Using RichTextRenderer for abstract display */}
+                        <Box sx={{
+                          mb: { xs: 2, sm: 3 },
+                          display: '-webkit-box',
+                          WebkitLineClamp: { xs: 2, sm: 3 },
+                          WebkitBoxOrient: 'vertical',
+                          overflow: 'hidden',
+                          lineHeight: 1.6,
+                          fontSize: { xs: '0.8rem', sm: '0.875rem' },
+                          color: 'text.secondary',
+                          '& p': {
+                            margin: 0,
                             display: '-webkit-box',
                             WebkitLineClamp: { xs: 2, sm: 3 },
                             WebkitBoxOrient: 'vertical',
                             overflow: 'hidden',
-                            lineHeight: 1.6,
-                            fontSize: { xs: '0.8rem', sm: '0.875rem' }
-                          }}
-                        >
-                          {project.abstract || 'No abstract available'}
-                        </Typography>
+                          }
+                        }}>
+                          {project.abstract ? (
+                            <RichTextRenderer content={project.abstract} />
+                          ) : (
+                            'No abstract available'
+                          )}
+                        </Box>
 
                         <Box sx={{ mb: { xs: 1.5, sm: 2 } }}>
                           {project.degree_type && (
@@ -1354,8 +1471,6 @@ const HomePage: React.FC = () => {
                 description: 'Using advanced analytics and evidence-based approaches to solve complex health challenges effectively.',
                 color: '#2a9d7f'
               }
-    
-              
             ].slice(0, isMobile ? 4 : 6).map((feature, index) => (
               <Grid item xs={12} sm={6} lg={4} key={index}>
                 <motion.div
@@ -1435,7 +1550,6 @@ const HomePage: React.FC = () => {
           </Grid>
         </Container>
       </Box>
-
     </Box>
   );
 };
