@@ -1,23 +1,47 @@
+# Core FastAPI and web framework
 fastapi>=0.104.0
 uvicorn[standard]>=0.24.0
+
+# Database and ORM
 sqlalchemy>=2.0.0
 psycopg2-binary>=2.9.0
 alembic>=1.12.0
+
+# Authentication and security
 python-jose[cryptography]>=3.3.0
 bcrypt>=4.0.1
 python-multipart>=0.0.6
+
+# Data validation and settings
 pydantic[email]>=2.10.1
 pydantic-settings>=2.1.0
 python-dotenv>=1.0.0
+
+# Email and communication
 fastapi-mail>=1.5.0
 aiosmtplib>=3.0.2
 email-validator>=2.2.0
+
+# File handling and image processing
 Pillow>=10.0.0
 aiofiles>=23.0.0
 python-multipart>=0.0.6
+
+# Document processing (existing)
 PyMuPDF==1.23.8
 python-docx==1.1.0
 tabula-py==2.8.2
 pandas==2.1.4
 matplotlib==3.8.2
-openpyxl==3.1.2 
+openpyxl==3.1.2
+
+# Enhanced table extraction (NEW)
+pdfplumber>=0.9.0                    # Primary table extraction library
+plotly>=5.17.0                       # Professional table visualization
+camelot-py[cv]>=0.11.0              # Fallback for bordered tables
+opencv-python>=4.8.1                 # Visual table detection
+transformers>=4.36.0                  # Table Transformer model
+torch>=2.1.0                         # PyTorch for deep learning models
+
+# Additional data processing (NEW)
+numpy>=1.24.0                        # Numerical operations for table processing
