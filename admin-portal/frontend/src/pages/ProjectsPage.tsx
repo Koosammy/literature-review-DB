@@ -113,6 +113,267 @@ interface AbstractHistory {
   author: string;
 }
 
+// Simple markdown parser for abstract preview
+const parseMarkdown = (text: string): React.ReactNode => {
+  if (!text) return null;
+  
+  // Process the text line by line
+  const lines = text.split('\n');
+  const elements: React.ReactNode[] = [];
+  
+  lines.forEach((line, index) => {
+    // Handle code blocks
+    if (line.startsWith('```')) {
+      elements.push(
+        <Box
+          key={index}
+          component="pre"
+          sx={{
+            bgcolor: alpha('#0a4f3c', 0.05),
+            p: 2,
+            borderRadius: 1,
+            fontFamily: 'monospace',
+            fontSize: '0.875rem',
+            overflow: 'auto',
+            my: 1
+          }}
+        >
+          {line.substring(3)}
+        </Box>
+      );
+      return;
+    }
+    
+    // Handle blockquotes
+    if (line.startsWith('> ')) {
+      elements.push(
+        <Box
+          key={index}
+          sx={{
+            borderLeft: '3px solid #0a4f3c',
+            pl: 2,
+            py: 1,
+            my: 1,
+            fontStyle: 'italic',
+            color: 'text.secondary'
+          }}
+        >
+          {parseInlineMarkdown(line.substring(2))}
+        </Box>
+      );
+      return;
+    }
+    
+    // Handle numbered lists
+    if (/^\d+\.\s/.test(line)) {
+      elements.push(
+        <Box key={index} sx={{ display: 'flex', my: 0.5 }}>
+          <Typography variant="body1" sx={{ mr: 1 }}>
+            {line.match(/^\d+\./)?.[0]}
+          </Typography>
+          <Typography variant="body1">
+            {parseInlineMarkdown(line.replace(/^\d+\.\s/, ''))}
+          </Typography>
+        </Box>
+      );
+      return;
+    }
+    
+    // Handle bullet lists
+    if (line.startsWith('• ')) {
+      elements.push(
+        <Box key={index} sx={{ display: 'flex', my: 0.5 }}>
+          <Typography variant="body1" sx={{ mr: 1 }}>
+            •
+          </Typography>
+          <Typography variant="body1">
+            {parseInlineMarkdown(line.substring(2))}
+          </Typography>
+        </Box>
+      );
+      return;
+    }
+    
+    // Handle regular paragraphs
+    if (line.trim()) {
+      elements.push(
+        <Typography key={index} variant="body1" sx={{ my: 1 }}>
+          {parseInlineMarkdown(line)}
+        </Typography>
+      );
+    } else {
+      // Add empty line for line breaks
+      elements.push(<br key={index} />);
+    }
+  });
+  
+  return <>{elements}</>;
+};
+
+// Parse inline markdown (bold, italic, underline, code)
+const parseInlineMarkdown = (text: string): React.ReactNode => {
+  if (!text) return null;
+  
+  // Create a copy of the text to work with
+  let result = text;
+  const elements: React.ReactNode[] = [];
+  let lastIndex = 0;
+  
+  // Process bold text (**text**)
+  const boldRegex = /\*\*(.*?)\*\*/g;
+  let match;
+  
+  while ((match = boldRegex.exec(result)) !== null) {
+    // Add text before the match
+    if (match.index > lastIndex) {
+      elements.push(result.substring(lastIndex, match.index));
+    }
+    
+    // Add bold text
+    elements.push(
+      <Typography key={`bold-${match.index}`} component="span" sx={{ fontWeight: 'bold' }}>
+        {match[1]}
+      </Typography>
+    );
+    
+    lastIndex = match.index + match[0].length;
+  }
+  
+  // Add remaining text
+  if (lastIndex < result.length) {
+    elements.push(result.substring(lastIndex));
+  }
+  
+  // If no bold formatting was found, return the original text
+  if (elements.length === 0) {
+    return result;
+  }
+  
+  // Process the result for italic formatting (*text*)
+  const italicElements: React.ReactNode[] = [];
+  lastIndex = 0;
+  
+  elements.forEach((element, index) => {
+    if (typeof element === 'string') {
+      // Process italic formatting in string elements
+      const italicRegex = /\*(.*?)\*/g;
+      let italicMatch;
+      let lastItalicIndex = 0;
+      
+      while ((italicMatch = italicRegex.exec(element)) !== null) {
+        // Add text before the match
+        if (italicMatch.index > lastItalicIndex) {
+          italicElements.push(element.substring(lastItalicIndex, italicMatch.index));
+        }
+        
+        // Add italic text
+        italicElements.push(
+          <Typography key={`italic-${index}-${italicMatch.index}`} component="span" sx={{ fontStyle: 'italic' }}>
+            {italicMatch[1]}
+          </Typography>
+        );
+        
+        lastItalicIndex = italicMatch.index + italicMatch[0].length;
+      }
+      
+      // Add remaining text
+      if (lastItalicIndex < element.length) {
+        italicElements.push(element.substring(lastItalicIndex));
+      }
+    } else {
+      // Add non-string elements as is
+      italicElements.push(element);
+    }
+  });
+  
+  // Process the result for underline formatting (__text__)
+  const underlineElements: React.ReactNode[] = [];
+  lastIndex = 0;
+  
+  italicElements.forEach((element, index) => {
+    if (typeof element === 'string') {
+      // Process underline formatting in string elements
+      const underlineRegex = /__(.*?)__/g;
+      let underlineMatch;
+      let lastUnderlineIndex = 0;
+      
+      while ((underlineMatch = underlineRegex.exec(element)) !== null) {
+        // Add text before the match
+        if (underlineMatch.index > lastUnderlineIndex) {
+          underlineElements.push(element.substring(lastUnderlineIndex, underlineMatch.index));
+        }
+        
+        // Add underlined text
+        underlineElements.push(
+          <Typography key={`underline-${index}-${underlineMatch.index}`} component="span" sx={{ textDecoration: 'underline' }}>
+            {underlineMatch[1]}
+          </Typography>
+        );
+        
+        lastUnderlineIndex = underlineMatch.index + underlineMatch[0].length;
+      }
+      
+      // Add remaining text
+      if (lastUnderlineIndex < element.length) {
+        underlineElements.push(element.substring(lastUnderlineIndex));
+      }
+    } else {
+      // Add non-string elements as is
+      underlineElements.push(element);
+    }
+  });
+  
+  // Process the result for inline code formatting (`text`)
+  const codeElements: React.ReactNode[] = [];
+  lastIndex = 0;
+  
+  underlineElements.forEach((element, index) => {
+    if (typeof element === 'string') {
+      // Process code formatting in string elements
+      const codeRegex = /`(.*?)`/g;
+      let codeMatch;
+      let lastCodeIndex = 0;
+      
+      while ((codeMatch = codeRegex.exec(element)) !== null) {
+        // Add text before the match
+        if (codeMatch.index > lastCodeIndex) {
+          codeElements.push(element.substring(lastCodeIndex, codeMatch.index));
+        }
+        
+        // Add code text
+        codeElements.push(
+          <Typography
+            key={`code-${index}-${codeMatch.index}`}
+            component="span"
+            sx={{
+              fontFamily: 'monospace',
+              bgcolor: alpha('#0a4f3c', 0.1),
+              px: 0.5,
+              py: 0.25,
+              borderRadius: 0.5,
+              fontSize: '0.875rem'
+            }}
+          >
+            {codeMatch[1]}
+          </Typography>
+        );
+        
+        lastCodeIndex = codeMatch.index + codeMatch[0].length;
+      }
+      
+      // Add remaining text
+      if (lastCodeIndex < element.length) {
+        codeElements.push(element.substring(lastCodeIndex));
+      }
+    } else {
+      // Add non-string elements as is
+      codeElements.push(element);
+    }
+  });
+  
+  return <>{codeElements}</>;
+};
+
 const ProjectsPage: React.FC = () => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1629,9 +1890,7 @@ const ProjectsPage: React.FC = () => {
                             }}
                           >
                             {formData.abstract ? (
-                              <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap' }}>
-                                {formData.abstract}
-                              </Typography>
+                              parseMarkdown(formData.abstract)
                             ) : (
                               <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
                                 No abstract content to preview
