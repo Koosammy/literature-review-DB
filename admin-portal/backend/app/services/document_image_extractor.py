@@ -499,12 +499,13 @@ class DocumentImageExtractor:
         
         # Pattern 3: Contains date-like strings
         date_pattern = r'\d{1,4}[-/]\d{1,2}[-/]\d{1,4}'
-        if df.applymap(lambda x: bool(re.search(date_pattern, str(x)))).any().any():
+        # Fixed: Convert DataFrame to string first
+        df_str = df.astype(str)
+        if df_str.applymap(lambda x: bool(re.search(date_pattern, x))).any().any():
             return True
         
         # Pattern 4: Contains common table keywords
         table_keywords = ['total', 'sum', 'average', 'count', 'percentage', '%', 'rate', 'ratio']
-        df_str = df.astype(str).lower()
         if any(keyword in df_str.values for keyword in table_keywords):
             return True
         
@@ -518,8 +519,9 @@ class DocumentImageExtractor:
         # Convert all cells to string
         df = df.astype(str)
         
+        # Fixed: Use map instead of deprecated applymap
         # Remove extra whitespace
-        df = df.applymap(lambda x: ' '.join(x.split()) if isinstance(x, str) else x)
+        df = df.map(lambda x: ' '.join(x.split()) if isinstance(x, str) else x)
         
         # Remove rows that are completely empty
         df = df[~(df == '').all(axis=1)]
