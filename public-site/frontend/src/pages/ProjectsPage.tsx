@@ -29,7 +29,8 @@ import {
   Collapse,
   SwipeableDrawer,
   Skeleton,
-  Zoom
+  Zoom,
+  alpha
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -53,6 +54,113 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { apiService } from '../services/api';
 import { ProjectSummary, SearchFilters, SearchResponse } from '../types';
 import SEOHead from '../components/SEOHead';
+
+// Rich Text Renderer Component - Copied from ProjectDetailPage
+const RichTextRenderer: React.FC<{ content: string }> = ({ content }) => {
+  if (!content) return null;  
+  
+  return (
+    <Typography 
+      variant="body1" 
+      component="div"
+      sx={{ 
+        lineHeight: 1.8,
+        textAlign: 'justify',
+        color: '#2e7d32',
+        fontSize: { xs: '0.95rem', sm: '1rem' },
+        '& strong': {
+          fontWeight: 'bold',
+          color: '#1b5e20',
+        },
+        '& em': {
+          fontStyle: 'italic',
+          color: '#1b5e20',
+        },
+        '& u': {
+          textDecoration: 'underline',
+          color: '#1b5e20',
+        },
+        '& blockquote': {
+          borderLeft: '3px solid #1b5e20',
+          paddingLeft: 2,
+          fontStyle: 'italic',
+          color: '#2e7d32',
+          margin: '16px 0',
+          backgroundColor: alpha('#1b5e20', 0.05),
+          padding: '12px 16px',
+          borderRadius: 2,
+        },
+        '& ul': {
+          paddingLeft: 2,
+          marginBottom: 1,
+          '& li': {
+            marginBottom: 0.5,
+            paddingLeft: 1,
+            position: 'relative',
+            '&:before': {
+              content: '"•"',
+              color: '#1b5e20',
+              fontWeight: 'bold',
+              position: 'absolute',
+              left: -16,
+            }
+          }
+        },
+        '& ol': {
+          paddingLeft: 2,
+          marginBottom: 1,
+          counterReset: 'item',
+          '& li': {
+            marginBottom: 0.5,
+            paddingLeft: 1,
+            position: 'relative',
+            counterIncrement: 'item',
+            '&:before': {
+              content: 'counter(item) "."',
+              color: '#1b5e20',
+              fontWeight: 'bold',
+              position: 'absolute',
+              left: -16,
+            }
+          }
+        },
+        '& pre': {
+          backgroundColor: alpha('#1b5e20', 0.05),
+          padding: 2,
+          borderRadius: 1,
+          fontFamily: 'monospace',
+          fontSize: '0.875rem',
+          overflow: 'auto',
+          margin: '16px 0',
+          border: '1px solid #c8e6c9',
+        },
+        '& code': {
+          fontFamily: 'monospace',
+          backgroundColor: alpha('#1b5e20', 0.1),
+          padding: '2px 4px',
+          borderRadius: 0.5,
+          fontSize: '0.875rem',
+        },
+        '& p': {
+          marginBottom: 1,
+        },
+        '& h1, & h2, & h3, & h4, & h5, & h6': {
+          color: '#1b5e20',
+          marginBottom: 1,
+          marginTop: 1.5,
+        },
+        '& a': {
+          color: '#2e7d32',
+          textDecoration: 'underline',
+          '&:hover': {
+            color: '#1b5e20',
+          }
+        }
+      }}
+      dangerouslySetInnerHTML={{ __html: content }}
+    />
+  );
+};
 
 // FilterForm Component - Outside of ProjectsPage
 const FilterForm: React.FC<{
@@ -1116,21 +1224,30 @@ const ProjectsPage: React.FC = () => {
                           </Typography>
                         </Box>
                         
-                        <Typography 
-                          variant="body2" 
-                          sx={{ 
-                            mb: { xs: 1.5, sm: 2, md: 3 },
-                            color: '#2e7d32',
+                        {/* Using RichTextRenderer for abstract display */}
+                        <Box sx={{
+                          mb: { xs: 1.5, sm: 2, md: 3 },
+                          display: '-webkit-box',
+                          WebkitLineClamp: { xs: 2, sm: 3 },
+                          WebkitBoxOrient: 'vertical',
+                          overflow: 'hidden',
+                          lineHeight: 1.6,
+                          fontSize: { xs: '0.75rem', sm: '0.8rem', md: '0.875rem', lg: '1rem' },
+                          color: '#2e7d32',
+                          '& p': {
+                            margin: 0,
                             display: '-webkit-box',
                             WebkitLineClamp: { xs: 2, sm: 3 },
                             WebkitBoxOrient: 'vertical',
                             overflow: 'hidden',
-                            lineHeight: 1.6,
-                            fontSize: { xs: '0.75rem', sm: '0.8rem', md: '0.875rem', lg: '1rem' }
-                          }}
-                        >
-                          {project.abstract || 'Research abstract not available. This study contributes to advancing public health knowledge and evidence-based practice.'}
-                        </Typography>
+                          }
+                        }}>
+                          {project.abstract ? (
+                            <RichTextRenderer content={project.abstract} />
+                          ) : (
+                            'Research abstract not available. This study contributes to advancing public health knowledge and evidence-based practice.'
+                          )}
+                        </Box>
                         
                         <Box sx={{ mb: { xs: 1.5, sm: 2, md: 3 } }}>
                           {project.research_area && (
