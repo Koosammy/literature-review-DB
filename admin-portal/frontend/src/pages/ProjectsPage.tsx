@@ -257,7 +257,7 @@ const ProjectsPage: React.FC = () => {
           id: 'current',
           content: project.abstract,
           timestamp: new Date(),
-          author: project.author_name
+          author: project.author_name || 'Unknown'
         }]);
       }
     } else {
@@ -566,11 +566,17 @@ const ProjectsPage: React.FC = () => {
   };
 
   const handleSaveAbstractVersion = () => {
+    // Get the author name from form data or use a fallback
+    const authorName = formData.author_name || 
+                      (currentUser as any)?.name || 
+                      (currentUser as any)?.username || 
+                      'Unknown';
+    
     const newVersion: AbstractHistory = {
       id: Date.now().toString(),
       content: formData.abstract,
       timestamp: new Date(),
-      author: currentUser?.name || 'Unknown'
+      author: authorName
     };
     
     setAbstractHistory(prev => [newVersion, ...prev]);
