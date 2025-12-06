@@ -60,9 +60,19 @@ class AdminApiService {
         (response) => response,
         (error) => {
           if (error.response?.status === 401) {
-            localStorage.removeItem('admin_token');
-            localStorage.removeItem('admin_user');
-            window.location.href = '/login';
+            // Check if we're not already on the login page to prevent redirect loops
+            const currentPath = window.location.hash;
+            const isOnLoginPage = currentPath === '#/login' || currentPath === '#/login/';
+            
+            if (!isOnLoginPage) {
+              localStorage.removeItem('admin_token');
+              localStorage.removeItem('admin_user');
+              
+              // ✅ FIXED: Use hash-based URL for HashRouter compatibility
+              // This ensures the URL stays in format: example.com/#/login
+              // instead of breaking to: example.com/login
+              window.location.href = window.location.origin + window.location.pathname + '#/login';
+            }
           }
           
           // Format error message for better display
@@ -406,7 +416,7 @@ class AdminApiService {
   // Health check method
   async healthCheck(): Promise<{ status: string; version: string }> {
     const response = await this.api.get('/health');
-    return response.data
+    return response.data;
   }
 
   // Project statistics
