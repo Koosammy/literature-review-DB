@@ -40,23 +40,26 @@ const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const theme = useTheme();
 
-  // In your LoginPage component
-const handleSubmit = async (e: React.FormEvent) => {
-  e.preventDefault();
-  setError('');
-  setLoading(true);
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
 
-  try {
-    await login(username, password);
-    // Navigate to dashboard on success
-    navigate('/dashboard');
-  } catch (err: any) {
-    // Stay on the same page and show error
-    setError(err.response?.data?.detail || 'Login failed. Please try again.');
-    setLoading(false);
-    // No navigation on error - stay on login page
-  }
-};
+    try {
+      await login(username, password);
+      // Navigate to dashboard on success
+      // Explicitly use the hash format for navigation to ensure consistency
+      navigate('/dashboard', { replace: true });
+    } catch (err: any) {
+      // Stay on the same page and show error
+      // We're not navigating on error to prevent the 404 issue
+      // The user will stay on the login page with the hash in the URL
+      setError(err.response?.data?.detail || 'Login failed. Please try again.');
+    } finally {
+      // Always set loading to false, whether login succeeds or fails
+      setLoading(false);
+    }
+  };
   
   const handleTogglePasswordVisibility = () => {
     setShowPassword(!showPassword);
