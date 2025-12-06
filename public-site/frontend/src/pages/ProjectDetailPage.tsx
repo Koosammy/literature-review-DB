@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
 import {
   Box,
   Container,
@@ -102,7 +101,7 @@ const ImageGallery: React.FC<{
 }> = ({ imageRecords, projectId, projectTitle }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  const isTablet = useMediaQuery(theme.breakpoints.down('md'));
+  const isTablet = useMediaQuery(theme.breakpoints.down('md'));  
   
   const [selectedImage, setSelectedImage] = useState<ProjectImage | null>(null);
   const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(null);
@@ -930,11 +929,118 @@ const ImageGallery: React.FC<{
   );
 };
 
+// New Rich Text Renderer Component
+const RichTextRenderer: React.FC<{ content: string }> = ({ content }) => {
+  if (!content) return null;
+  
+  return (
+    <Typography 
+      variant="body1" 
+      component="div"
+      sx={{ 
+        lineHeight: 1.8,
+        textAlign: 'justify',
+        color: '#2e7d32',
+        fontSize: { xs: '0.95rem', sm: '1rem' },
+        '& strong': {
+          fontWeight: 'bold',
+          color: '#1b5e20',
+        },
+        '& em': {
+          fontStyle: 'italic',
+          color: '#1b5e20',
+        },
+        '& u': {
+          textDecoration: 'underline',
+          color: '#1b5e20',
+        },
+        '& blockquote': {
+          borderLeft: '3px solid #1b5e20',
+          paddingLeft: 2,
+          fontStyle: 'italic',
+          color: '#2e7d32',
+          margin: '16px 0',
+          backgroundColor: alpha('#1b5e20', 0.05),
+          padding: '12px 16px',
+          borderRadius: 2,
+        },
+        '& ul': {
+          paddingLeft: 2,
+          marginBottom: 1,
+          '& li': {
+            marginBottom: 0.5,
+            paddingLeft: 1,
+            position: 'relative',
+            '&:before': {
+              content: '"•"',
+              color: '#1b5e20',
+              fontWeight: 'bold',
+              position: 'absolute',
+              left: -16,
+            }
+          }
+        },
+        '& ol': {
+          paddingLeft: 2,
+          marginBottom: 1,
+          counterReset: 'item',
+          '& li': {
+            marginBottom: 0.5,
+            paddingLeft: 1,
+            position: 'relative',
+            counterIncrement: 'item',
+            '&:before': {
+              content: 'counter(item) "."',
+              color: '#1b5e20',
+              fontWeight: 'bold',
+              position: 'absolute',
+              left: -16,
+            }
+          }
+        },
+        '& pre': {
+          backgroundColor: alpha('#1b5e20', 0.05),
+          padding: 2,
+          borderRadius: 1,
+          fontFamily: 'monospace',
+          fontSize: '0.875rem',
+          overflow: 'auto',
+          margin: '16px 0',
+          border: '1px solid #c8e6c9',
+        },
+        '& code': {
+          fontFamily: 'monospace',
+          backgroundColor: alpha('#1b5e20', 0.1),
+          padding: '2px 4px',
+          borderRadius: 0.5,
+          fontSize: '0.875rem',
+        },
+        '& p': {
+          marginBottom: 1,
+        },
+        '& h1, & h2, & h3, & h4, & h5, & h6': {
+          color: '#1b5e20',
+          marginBottom: 1,
+          marginTop: 1.5,
+        },
+        '& a': {
+          color: '#2e7d32',
+          textDecoration: 'underline',
+          '&:hover': {
+            color: '#1b5e20',
+          }
+        }
+      }}
+      dangerouslySetInnerHTML={{ __html: content }}
+    />
+  );
+};
+
 const ProjectDetailPage: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));  
   
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
@@ -1364,17 +1470,10 @@ const ProjectDetailPage: React.FC = () => {
                     Abstract
                   </Typography>
                 </Box>
-                <Typography 
-                  variant="body1" 
-                  sx={{ 
-                    lineHeight: 1.8,
-                    color: '#2e7d32',
-                    fontSize: { xs: '0.95rem', sm: '1.1rem' },
-                    textAlign: 'justify'
-                  }}
-                >
-                  {project.abstract}
-                </Typography>
+                {/* Use RichTextRenderer to display formatted abstract */}
+                <Box sx={{ p: { xs: 1, sm: 2 } }}>
+                  <RichTextRenderer content={project.abstract} />
+                </Box>
               </Paper>
             )}
 
