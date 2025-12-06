@@ -37,15 +37,6 @@ except ImportError:
     print("Warning: plotly not available. Install with: pip install plotly")
 
 try:
-    import torch
-    from transformers import DetrImageProcessor, TableTransformerForObjectDetection
-    from PIL import Image as PILImage
-    TRANSFORMER_AVAILABLE = True
-except ImportError:
-    TRANSFORMER_AVAILABLE = False
-    print("Warning: transformers not available. Install with: pip install transformers torch")
-
-try:
     import cv2
     import fitz  # PyMuPDF
     CV2_AVAILABLE = True
@@ -74,10 +65,6 @@ class DocumentImageExtractor:
             'min_words_vertical': 3,
             'min_words_horizontal': 1,
         }
-        
-        # Cache for transformer model to avoid reloading
-        self._transformer_model = None
-        self._transformer_processor = None
     
     async def extract_images_from_document(
         self, 
@@ -346,17 +333,6 @@ class DocumentImageExtractor:
             except Exception as e:
                 print(f"OpenCV fallback failed: {e}")
         
-        # Try Transformer if available and still few tables
-        if TRANSFORMER_AVAILABLE and tables_count < 3:
-            try:
-                transformer_tables = await self._extract_tables_with_transformer(
-                    pdf_path, project_id, db, start_index + tables_count
-                )
-                tables_count += transformer_tables
-                print(f"Transformer detected {transformer_tables} additional tables")
-            except Exception as e:
-                print(f"Transformer fallback failed: {e}")
-        
         return tables_count
     
     async def _extract_tables_with_camelot(
@@ -483,79 +459,6 @@ class DocumentImageExtractor:
             
         except Exception as e:
             print(f"Error in OpenCV table detection: {e}")
-        
-        return tables_count
-    
-    async def _extract_tables_with_transformer(
-        self, 
-        pdf_path: str, 
-        project_id: int, 
-        db: Session, 
-        start_index: int
-    ) -> int:
-        """Extract tables using Table Transformer model"""
-        tables_count = 0
-        
-        try:
-            # Load model if not already loaded
-            if self._transformer_model is None:
-                print("Loading Table Transformer model...")
-                self._transformer_processor = DetrImageProcessor.from_pretrained(
-                    "microsoft/table-transformer-detection"
-                )
-                self._transformer_model = TableTransformerForObjectDetection.from_pretrained(
-                    "microsoft/table-transformer-detection"
-                )
-            
-            pdf_document = fitz.open(pdf_path)
-            
-            for page_num in range(len(pdf_document)):
-                page = pdf_document.load_page(page_num)
-                pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
-                img_data = pix.tobytes("png")
-                
-                # Convert to PIL Image
-                image = PILImage.open(io.BytesIO(img_data))
-                
-                # Process with model
-                inputs = self._transformer_processor(images=image, return_tensors="pt")
-                outputs = self._transformer_model(**inputs)
-                
-                # Convert outputs to COCO format
-                target_sizes = torch.tensor([image.size[::-1]])
-                results = self._transformer_processor.post_process_object_detection(
-                    outputs, target_sizes=target_sizes, threshold=0.9
-                )[0]
-                
-                # Process each detected table
-                for i, score in enumerate(results["scores"]):
-                    if score > 0.9:  # High confidence
-                        box = results["boxes"][i].tolist()
-                        
-                        # Extract table region
-                        x1, y1, x2, y2 = [int(coord) for coord in box]
-                        table_img = image.crop((x1, y1, x2, y2))
-                        
-                        # Convert to bytes
-                        buffer = io.BytesIO()
-                        table_img.save(buffer, format="PNG")
-                        table_image_bytes = buffer.getvalue()
-                        
-                        filename = f"table_transformer_page{page_num + 1}_{i + 1}.png"
-                        await self.db_image_service.save_image_bytes_to_db(
-                            image_bytes=table_image_bytes,
-                            filename=filename,
-                            project_id=project_id,
-                            db=db,
-                            order_index=start_index + tables_count,
-                            is_featured=False
-                        )
-                        tables_count += 1
-            
-            pdf_document.close()
-            
-        except Exception as e:
-            print(f"Error in Transformer table extraction: {e}")
         
         return tables_count
     
