@@ -43,3 +43,4 @@ opencv-python>=4.8.1                 # Visual table detection
 
 # Additional data processing (NEW)
 numpy>=1.24.0                        # Numerical operations for table processing
+httpx>=0.25.0
