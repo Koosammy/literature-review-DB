@@ -37,10 +37,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       const token = localStorage.getItem('admin_token');
       if (token) {
-        const userData = await adminApi.getCurrentUser();
-        setUser(userData);
-        // Update localStorage with fresh user data
-        localStorage.setItem('admin_user', JSON.stringify(userData));
+        // Validate token before making API call
+        try {
+          const userData = await adminApi.getCurrentUser();
+          setUser(userData);
+          // Update localStorage with fresh user data
+          localStorage.setItem('admin_user', JSON.stringify(userData));
+        } catch (apiError) {
+          // If token is invalid, clear it
+          console.error('Invalid token:', apiError);
+          localStorage.removeItem('admin_token');
+          localStorage.removeItem('admin_user');
+        }
       }
     } catch (error) {
       console.error('Auth check failed:', error);
@@ -54,20 +62,37 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const login = async (username: string, password: string) => {
     try {
       const response = await adminApi.login({ username, password });
+      
+      // Check if response contains the expected data
+      if (!response || !response.access_token) {
+        throw new Error('Invalid response from server');
+      }
+      
       localStorage.setItem('admin_token', response.access_token);
       
       // The login response now includes complete user data
       const userData = response.user as User;
+      if (!userData) {
+        throw new Error('User data not received from server');
+      }
+      
       setUser(userData);
       localStorage.setItem('admin_user', JSON.stringify(userData));
     } catch (error) {
+      // Ensure we're not throwing an error that might cause navigation issues
+      // Just re-throw the error to be handled by the calling component
       throw error;
     }
   };
 
   const logout = () => {
-    adminApi.logout().catch(console.error); // Don't wait for logout API call
+    // Don't wait for logout API call to complete
+    adminApi.logout().catch(console.error);
+    
+    // Clear user state immediately
     setUser(null);
+    
+    // Clear localStorage
     localStorage.removeItem('admin_token');
     localStorage.removeItem('admin_user');
   };
