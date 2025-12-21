@@ -1467,7 +1467,7 @@ const ProjectDetailPage: React.FC = () => {
                   <Avatar sx={{ bgcolor: '#2e7d32', width: { xs: 32, sm: 40 }, height: { xs: 32, sm: 40 } }}>
                     <CategoryIcon sx={{ fontSize: { xs: 20, sm: 24 } }} />
                   </Avatar>
-                  <Typography variant={isMobile ? "h6" : "h5"} sx={{ color: '#000000', fontWeight: 'bold' }}>
+                  <Typography variant={isMobile ? "h6" : "h5"} sx={{ color: '#1b5e20', fontWeight: 'bold' }}>
                     Abstract
                   </Typography>
                 </Box>
