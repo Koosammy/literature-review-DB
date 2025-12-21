@@ -941,7 +941,7 @@ const RichTextRenderer: React.FC<{ content: string }> = ({ content }) => {
       sx={{ 
         lineHeight: 1.8,
         textAlign: 'justify',
-        color: '#2e7d32',
+        color: '#000000',
         fontSize: { xs: '0.95rem', sm: '1rem' },
         '& strong': {
           fontWeight: 'bold',
