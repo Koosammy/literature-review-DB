@@ -47,6 +47,8 @@ import SEOHead from '../components/SEOHead';
 import { motion } from 'framer-motion';
 import { alpha } from '@mui/material/styles';
 
+const deanImage = `${process.env.PUBLIC_URL || ''}/images/dean.jpeg`;
+
 // Animation variants
 const fadeInUp = {
   initial: { opacity: 0, y: 60 },
@@ -815,7 +817,7 @@ const HomePage: React.FC = () => {
                   >
                     <Box
                       component="img"
-                      src="/images/dean.jpeg"
+                      src={deanImage}
                       alt="Dean of School of Public Health"
                       sx={{
                         width: '100%',
