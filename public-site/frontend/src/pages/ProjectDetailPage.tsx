@@ -54,6 +54,7 @@ import { apiService } from '../services/api';
 import DocumentViewer from '../components/DocumentViewer';
 import SEOHead from '../components/SEOHead';
 import StructuredData from '../components/StructuredData';
+import { getProjectImageUrl } from '../types';
 
 // Update the Project interface
 interface ProjectImage {
@@ -89,10 +90,8 @@ interface Project {
   image_records?: ProjectImage[];
 }
 
-// Add helper function for image URLs
-const getImageUrl = (projectId: number, imageId: number): string => {
-  return `${process.env.REACT_APP_API_URL}/projects/${projectId}/images/${imageId}`;
-};
+// Use the shared helper so image URLs consistently include the backend /api prefix.
+const getImageUrl = getProjectImageUrl;
 
 // Enhanced Modern Image Gallery Component
 const ImageGallery: React.FC<{ 
