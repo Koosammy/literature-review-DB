@@ -22,10 +22,12 @@ except Exception as e:
 "
 
 echo "3. Running database migrations..."
+alembic upgrade head
+
 python -c "
 from app.database import engine
 from app.models import Base
-print('Creating/updating database tables...')
+print('Creating any missing database tables...')
 Base.metadata.create_all(bind=engine)
 print('✓ Database tables ready')
 "
