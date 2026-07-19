@@ -7,6 +7,7 @@ from pathlib import Path
 import os
 
 from app.api import auth, users, projects, dashboard, profile, utils
+from app.core.config import settings
 from app.database import engine
 from app.models import Base
 
@@ -33,13 +34,15 @@ print(f"📁 Upload directory exists: {UPLOAD_DIR.exists()}")
 print(f"📁 Static directory: {STATIC_DIR}")
 
 # Configure CORS
+configured_origins = list(settings.CORS_ORIGINS)
+for origin in [settings.ADMIN_SITE_URL, settings.FRONTEND_URL]:
+    if origin and origin not in configured_origins:
+        configured_origins.append(origin)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://research-hub-admin-portal.onrender.com",
-        "http://localhost:3000",
-        "http://localhost:3001"
-    ],
+    allow_origins=configured_origins,
+    allow_origin_regex=r"https://research-hub-admin-portal[-a-z0-9]*\.onrender\.com",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -47,6 +50,8 @@ app.add_middleware(
 
 # Include routers FIRST
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
+# Backward-compatible auth routes for deployments whose frontend API URL omits `/api`.
+app.include_router(auth.router, prefix="/auth", tags=["auth-compat"])
 app.include_router(users.router, prefix="/api/users", tags=["users"])
 app.include_router(projects.router, prefix="/api/projects", tags=["projects"])
 app.include_router(dashboard.router, prefix="/api/dashboard", tags=["dashboard"])
