@@ -47,7 +47,7 @@ import SEOHead from '../components/SEOHead';
 import { motion } from 'framer-motion';
 import { alpha } from '@mui/material/styles';
 
-const deanImage = `${process.env.PUBLIC_URL || ''}/images/dean.jpeg`;
+const deanImage = `${process.env.PUBLIC_URL || ''}/images/dean.jpg`;
 
 // Animation variants
 const fadeInUp = {
