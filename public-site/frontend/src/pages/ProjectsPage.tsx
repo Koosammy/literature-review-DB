@@ -4,9 +4,6 @@ import {
   Container,
   Typography,
   Grid,
-  Card,
-  CardContent,
-  CardActions,
   Button,
   Chip,
   Pagination,
@@ -29,20 +26,13 @@ import {
   Collapse,
   SwipeableDrawer,
   Skeleton,
-  Zoom,
-  alpha
+  Zoom
 } from '@mui/material';
 import {
   Search as SearchIcon,
-  Visibility as ViewIcon,
-  Download as DownloadIcon,
-  ArrowForward as ArrowIcon,
   FilterList as FilterIcon,
-  LocalHospital as HealthIcon,
   Science as ResearchIcon,
-  School as SchoolIcon,
   Public as PublicIcon,
-  Person as PersonIcon,
   CalendarToday as CalendarIcon,
   Close as CloseIcon,
   ExpandMore as ExpandMoreIcon,
@@ -52,115 +42,9 @@ import {
 } from '@mui/icons-material';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { apiService } from '../services/api';
-import { ProjectSummary, SearchFilters, SearchResponse } from '../types';
+import { SearchFilters, SearchResponse } from '../types';
 import SEOHead from '../components/SEOHead';
-
-// Rich Text Renderer Component - Copied from ProjectDetailPage
-const RichTextRenderer: React.FC<{ content: string }> = ({ content }) => {
-  if (!content) return null;  
-  
-  return (
-    <Typography 
-      variant="body1" 
-      component="div"
-      sx={{ 
-        lineHeight: 1.8,
-        textAlign: 'justify',
-        color: '#2e7d32',
-        fontSize: { xs: '0.95rem', sm: '1rem' },
-        '& strong': {
-          fontWeight: 'bold',
-          color: '#1b5e20',
-        },
-        '& em': {
-          fontStyle: 'italic',
-          color: '#1b5e20',
-        },
-        '& u': {
-          textDecoration: 'underline',
-          color: '#1b5e20',
-        },
-        '& blockquote': {
-          borderLeft: '3px solid #1b5e20',
-          paddingLeft: 2,
-          fontStyle: 'italic',
-          color: '#2e7d32',
-          margin: '16px 0',
-          backgroundColor: alpha('#1b5e20', 0.05),
-          padding: '12px 16px',
-          borderRadius: 2,
-        },
-        '& ul': {
-          paddingLeft: 2,
-          marginBottom: 1,
-          '& li': {
-            marginBottom: 0.5,
-            paddingLeft: 1,
-            position: 'relative',
-            '&:before': {
-              content: '"•"',
-              color: '#1b5e20',
-              fontWeight: 'bold',
-              position: 'absolute',
-              left: -16,
-            }
-          }
-        },
-        '& ol': {
-          paddingLeft: 2,
-          marginBottom: 1,
-          counterReset: 'item',
-          '& li': {
-            marginBottom: 0.5,
-            paddingLeft: 1,
-            position: 'relative',
-            counterIncrement: 'item',
-            '&:before': {
-              content: 'counter(item) "."',
-              color: '#1b5e20',
-              fontWeight: 'bold',
-              position: 'absolute',
-              left: -16,
-            }
-          }
-        },
-        '& pre': {
-          backgroundColor: alpha('#1b5e20', 0.05),
-          padding: 2,
-          borderRadius: 1,
-          fontFamily: 'monospace',
-          fontSize: '0.875rem',
-          overflow: 'auto',
-          margin: '16px 0',
-          border: '1px solid #c8e6c9',
-        },
-        '& code': {
-          fontFamily: 'monospace',
-          backgroundColor: alpha('#1b5e20', 0.1),
-          padding: '2px 4px',
-          borderRadius: 0.5,
-          fontSize: '0.875rem',
-        },
-        '& p': {
-          marginBottom: 1,
-        },
-        '& h1, & h2, & h3, & h4, & h5, & h6': {
-          color: '#1b5e20',
-          marginBottom: 1,
-          marginTop: 1.5,
-        },
-        '& a': {
-          color: '#2e7d32',
-          textDecoration: 'underline',
-          '&:hover': {
-            color: '#1b5e20',
-          }
-        }
-      }}
-      dangerouslySetInnerHTML={{ __html: content }}
-    />
-  );
-};
+import ProjectCard from '../components/ProjectCard';
 
 // FilterForm Component - Outside of ProjectsPage
 const FilterForm: React.FC<{
@@ -1151,244 +1035,12 @@ const ProjectsPage: React.FC = () => {
               {searchResponse.projects.map((project, index) => (
                 <Grid item xs={12} sm={6} md={4} lg={4} key={project.id}>
                   <Zoom in timeout={300 + index * 50}>
-                    <Card
-                      sx={{
-                        height: '100%',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        transition: 'all 0.3s ease',
-                        cursor: 'pointer',
-                        borderRadius: { xs: 2, sm: 3, md: 4 },
-                        border: '2px solid #c8e6c9',
-                        background: 'linear-gradient(135deg, #ffffff 0%, #f9fbe7 100%)',
-                        boxShadow: '0 4px 16px rgba(27, 94, 32, 0.1)',
-                        position: 'relative',
-                        overflow: 'hidden',
-                        '&:hover': {
-                          transform: { xs: 'none', sm: 'translateY(-4px)', md: 'translateY(-8px)' },
-                          boxShadow: '0 16px 48px rgba(27, 94, 32, 0.2)',
-                          border: '2px solid #2e7d32'
-                        },
-                        '&:active': {
-                          transform: { xs: 'scale(0.98)', sm: 'translateY(-4px) scale(0.98)', md: 'translateY(-8px) scale(0.98)' }
-                        }
-                      }}
+                    <ProjectCard
+                      project={project}
+                      index={index}
+                      compact={isMobile}
                       onClick={() => navigate(`/projects/${project.slug}`)}
-                    >
-                      {/* Touch Ripple Effect for Mobile */}
-                      <Box
-                        sx={{
-                          position: 'absolute',
-                          top: 0,
-                          left: 0,
-                          right: 0,
-                          bottom: 0,
-                          background: 'transparent',
-                          zIndex: 1,
-                          pointerEvents: 'none'
-                        }}
-                      />
-                      
-                      <CardContent sx={{ flexGrow: 1, p: { xs: 2, sm: 2.5, md: 3 } }}>
-                        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: { xs: 1.5, sm: 2 }, mb: 2 }}>
-                          <Avatar
-                            sx={{
-                              bgcolor: '#1b5e20',
-                              width: { xs: 28, sm: 32, md: 36, lg: 40 },
-                              height: { xs: 28, sm: 32, md: 36, lg: 40 },
-                              flexShrink: 0
-                            }}
-                          >
-                            <HealthIcon sx={{ fontSize: { xs: 14, sm: 16, md: 18, lg: 20 } }} />
-                          </Avatar>
-                          <Typography 
-                            variant="h6" 
-                            component="h3" 
-                            sx={{ 
-                              fontWeight: 'bold',
-                              color: '#1b5e20',
-                              display: '-webkit-box',
-                              WebkitLineClamp: { xs: 2, sm: 2 },
-                              WebkitBoxOrient: 'vertical',
-                              overflow: 'hidden',
-                              lineHeight: 1.3,
-                              fontSize: { 
-                                xs: isExtraSmall ? '0.8rem' : '0.875rem', 
-                                sm: '0.95rem', 
-                                md: '1.1rem', 
-                                lg: '1.25rem' 
-                              }
-                            }}
-                          >
-                            {project.title}
-                          </Typography>
-                        </Box>
-                        
-                        {/* Using RichTextRenderer for abstract display */}
-                        <Box sx={{
-                          mb: { xs: 1.5, sm: 2, md: 3 },
-                          display: '-webkit-box',
-                          WebkitLineClamp: { xs: 2, sm: 3 },
-                          WebkitBoxOrient: 'vertical',
-                          overflow: 'hidden',
-                          lineHeight: 1.6,
-                          fontSize: { xs: '0.75rem', sm: '0.8rem', md: '0.875rem', lg: '1rem' },
-                          color: '#2e7d32',
-                          '& p': {
-                            margin: 0,
-                            display: '-webkit-box',
-                            WebkitLineClamp: { xs: 2, sm: 3 },
-                            WebkitBoxOrient: 'vertical',
-                            overflow: 'hidden',
-                          }
-                        }}>
-                          {project.abstract ? (
-                            <RichTextRenderer content={project.abstract} />
-                          ) : (
-                            'Research abstract not available. This study contributes to advancing public health knowledge and evidence-based practice.'
-                          )}
-                        </Box>
-                        
-                        <Box sx={{ mb: { xs: 1.5, sm: 2, md: 3 } }}>
-                          {project.research_area && (
-                            <Chip 
-                              label={project.research_area} 
-                              size="small"
-                              icon={<HealthIcon />}
-                              sx={{
-                                mr: 0.5, 
-                                mb: 0.5,
-                                bgcolor: '#1b5e20',
-                                color: 'white',
-                                fontWeight: 'bold',
-                                fontSize: { xs: '0.6rem', sm: '0.65rem', md: '0.7rem', lg: '0.75rem' },
-                                height: { xs: 20, sm: 24, md: 28 },
-                                '& .MuiChip-icon': { 
-                                  color: 'white',
-                                  fontSize: { xs: 12, sm: 14, md: 16 }
-                                }
-                              }}
-                            />
-                          )}
-                          {project.degree_type && (
-                            <Chip 
-                              label={project.degree_type} 
-                              size="small"
-                              icon={<SchoolIcon />}
-                              sx={{
-                                mr: 0.5, 
-                                mb: 0.5,
-                                bgcolor: '#2e7d32',
-                                color: 'white',
-                                fontWeight: 'bold',
-                                fontSize: { xs: '0.6rem', sm: '0.65rem', md: '0.7rem', lg: '0.75rem' },
-                                height: { xs: 20, sm: 24, md: 28 },
-                                '& .MuiChip-icon': { 
-                                  color: 'white',
-                                  fontSize: { xs: 12, sm: 14, md: 16 }
-                                }
-                              }}
-                            />
-                          )}
-                        </Box>
-
-                        <Box sx={{ 
-                          p: { xs: 1, sm: 1.25, md: 1.5, lg: 2 }, 
-                          bgcolor: 'rgba(27, 94, 32, 0.05)', 
-                          borderRadius: { xs: 1.5, sm: 2 },
-                          border: '1px solid #e8f5e9'
-                        }}>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 0.5, sm: 1 }, mb: { xs: 0.5, sm: 1 } }}>
-                            <PersonIcon sx={{ fontSize: { xs: 10, sm: 12, md: 14, lg: 16 }, color: '#2e7d32' }} />
-                            <Typography 
-                              variant="caption" 
-                              sx={{ 
-                                color: '#1b5e20', 
-                                fontWeight: 600,
-                                fontSize: { xs: '0.6rem', sm: '0.65rem', md: '0.75rem', lg: '0.875rem' },
-                                lineHeight: 1.2
-                              }}
-                            >
-                              {project.author_name}
-                            </Typography>
-                          </Box>
-                          
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 0.5, sm: 1 } }}>
-                            <SchoolIcon sx={{ fontSize: { xs: 10, sm: 12, md: 14, lg: 16 }, color: '#2e7d32' }} />
-                            <Typography 
-                              variant="caption" 
-                              sx={{ 
-                                color: '#2e7d32', 
-                                fontWeight: 500,
-                                fontSize: { xs: '0.6rem', sm: '0.65rem', md: '0.75rem', lg: '0.875rem' },
-                                lineHeight: 1.2,
-                                display: '-webkit-box',
-                                WebkitLineClamp: 1,
-                                WebkitBoxOrient: 'vertical',
-                                overflow: 'hidden'
-                              }}
-                            >
-                              {project.institution}
-                            </Typography>
-                          </Box>
-                        </Box>
-                      </CardContent>
-                      
-                      <CardActions sx={{ 
-                        p: { xs: 1.25, sm: 1.5, md: 2, lg: 3 }, 
-                        pt: 0, 
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        minHeight: { xs: 40, sm: 48, md: 56 }
-                      }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, sm: 1.5, md: 2 } }}>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                            <ViewIcon sx={{ fontSize: { xs: 10, sm: 12, md: 14, lg: 16 }, color: '#2e7d32' }} />
-                            <Typography 
-                              variant="caption" 
-                              sx={{ 
-                                color: '#2e7d32', 
-                                fontWeight: 600,
-                                fontSize: { xs: '0.6rem', sm: '0.65rem', md: '0.75rem', lg: '0.875rem' }
-                              }}
-                            >
-                              {project.view_count}
-                            </Typography>
-                          </Box>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                            <DownloadIcon sx={{ fontSize: { xs: 10, sm: 12, md: 14, lg: 16 }, color: '#2e7d32' }} />
-                            <Typography 
-                              variant="caption" 
-                              sx={{ 
-                                color: '#2e7d32', 
-                                fontWeight: 600,
-                                fontSize: { xs: '0.6rem', sm: '0.65rem', md: '0.75rem', lg: '0.875rem' }
-                              }}
-                            >
-                              {project.download_count}
-                            </Typography>
-                          </Box>
-                        </Box>
-                        <Button
-                          size="small"
-                          endIcon={<ArrowIcon sx={{ fontSize: { xs: 12, sm: 14, md: 16 } }} />}
-                          sx={{ 
-                            textTransform: 'none',
-                            color: '#1b5e20',
-                            fontWeight: 'bold',
-                            fontSize: { xs: '0.7rem', sm: '0.75rem', md: '0.875rem', lg: '1rem' },
-                            px: { xs: 0.75, sm: 1, md: 1.5 },
-                            py: { xs: 0.25, sm: 0.5, md: 0.75 },
-                            borderRadius: { xs: 1.5, sm: 2 },
-                            '&:hover': {
-                              bgcolor: '#e8f5e9'
-                            }
-                          }}
-                        >
-                          {isExtraSmall ? 'View' : 'View'}
-                        </Button>
-                      </CardActions>
-                    </Card>
+                    />
                   </Zoom>
                 </Grid>
               ))}
