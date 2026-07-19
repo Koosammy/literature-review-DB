@@ -22,14 +22,7 @@ except Exception as e:
 "
 
 echo "3. Running Alembic migrations..."
-if alembic current 2>/dev/null; then
-    echo "Current migration state:"
-    alembic current
-    alembic upgrade head
-else
-    echo "Initializing Alembic..."
-    alembic stamp head
-fi
+alembic upgrade head
 
 echo "4. Creating upload directory..."
 mkdir -p uploads
