@@ -48,7 +48,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include routers FIRST
+# Include API routers FIRST
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 # Backward-compatible auth routes for deployments whose frontend API URL omits `/api`.
 app.include_router(auth.router, prefix="/auth", tags=["auth-compat"])
@@ -57,6 +57,14 @@ app.include_router(projects.router, prefix="/api/projects", tags=["projects"])
 app.include_router(dashboard.router, prefix="/api/dashboard", tags=["dashboard"])
 app.include_router(profile.router, prefix="/api/profile", tags=["profile"])
 app.include_router(utils.router, prefix="/api/utils", tags=["utils"])
+
+# Backward-compatible API routes for deployments whose frontend API URL omits `/api`.
+app.include_router(auth.router, prefix="/auth", tags=["auth-compat"])
+app.include_router(users.router, prefix="/users", tags=["users-compat"])
+app.include_router(projects.router, prefix="/projects", tags=["projects-compat"])
+app.include_router(dashboard.router, prefix="/dashboard", tags=["dashboard-compat"])
+app.include_router(profile.router, prefix="/profile", tags=["profile-compat"])
+app.include_router(utils.router, prefix="/utils", tags=["utils-compat"])
 
 # IMPORTANT: Add the fallback route for uploads BEFORE mounting static files
 @app.get("/api/uploads/{file_path:path}")
