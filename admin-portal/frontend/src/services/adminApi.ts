@@ -1,7 +1,10 @@
 import axios, { AxiosResponse } from 'axios';
 import { User, Project, DashboardStats, LoginRequest, AuthResponse, FormConstants } from '../types';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8001/api';
+const RAW_API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8001/api';
+const API_BASE_URL = RAW_API_BASE_URL.replace(/\/$/, '').endsWith('/api')
+  ? RAW_API_BASE_URL.replace(/\/$/, '')
+  : `${RAW_API_BASE_URL.replace(/\/$/, '')}/api`;
 
 // Password Reset Types
 interface PasswordResetResponse {
