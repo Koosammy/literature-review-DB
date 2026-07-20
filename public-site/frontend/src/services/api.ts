@@ -44,7 +44,7 @@ class ApiService {
       if (params?.research_area) queryParams.append('research_area', params.research_area);
       if (params?.degree_type) queryParams.append('degree_type', params.degree_type);
 
-      const response = await this.api.get(`/api/projects?${queryParams}`);
+      const response = await this.api.get(`/api/projects/?${queryParams}`);
       if (!Array.isArray(response.data)) {
         throw new Error('Projects API returned an invalid response');
       }
