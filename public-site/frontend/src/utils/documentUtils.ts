@@ -1,8 +1,5 @@
 // src/utils/documentUtils.ts
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
-const cleanBaseUrl = API_BASE_URL.endsWith('/api') 
-  ? API_BASE_URL.slice(0, -4) 
-  : API_BASE_URL.replace(/\/$/, '');
+import { cleanBaseUrl } from '../config/api';
 
 export const documentUtils = {
   viewDocument: (projectSlug: string) => {
