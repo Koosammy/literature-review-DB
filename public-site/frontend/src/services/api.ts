@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { cleanBaseUrl } from '../config/api';
 // Import ALL types from the central types file
 import { 
   Project, 
@@ -11,11 +12,6 @@ import {
   getFeaturedImageUrl
 } from '../types';
 
-// Remove /api if it's already included in the environment variable
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
-const cleanBaseUrl = API_BASE_URL.endsWith('/api') 
-  ? API_BASE_URL.slice(0, -4) 
-  : API_BASE_URL.replace(/\/$/, ''); // Also remove trailing slash
 
 class ApiService {
   private api = axios.create({
@@ -48,7 +44,10 @@ class ApiService {
       if (params?.research_area) queryParams.append('research_area', params.research_area);
       if (params?.degree_type) queryParams.append('degree_type', params.degree_type);
 
-      const response = await this.api.get(`/api/projects?${queryParams}`);
+      const response = await this.api.get(`/api/projects/?${queryParams}`);
+      if (!Array.isArray(response.data)) {
+        throw new Error('Projects API returned an invalid response');
+      }
       return response.data;
     } catch (error) {
       console.error('Failed to fetch projects:', error);
@@ -78,6 +77,9 @@ class ApiService {
   async getFeaturedProjects(limit: number = 6): Promise<Project[]> {
     try {
       const response = await this.api.get(`/api/projects/featured?limit=${limit}`);
+      if (!Array.isArray(response.data)) {
+        throw new Error('Featured projects API returned an invalid response');
+      }
       return response.data;
     } catch (error) {
       console.error('Failed to fetch featured projects:', error);
@@ -98,7 +100,7 @@ class ApiService {
   async getResearchAreas(): Promise<string[]> {
     try {
       const response = await this.api.get('/api/projects/research-areas/list');
-      return response.data;
+      return Array.isArray(response.data) ? response.data : [];
     } catch (error) {
       console.error('Failed to fetch research areas:', error);
       throw new Error('Failed to fetch research areas');
@@ -108,7 +110,7 @@ class ApiService {
   async getInstitutions(): Promise<string[]> {
     try {
       const response = await this.api.get('/api/projects/institutions/list');
-      return response.data;
+      return Array.isArray(response.data) ? response.data : [];
     } catch (error) {
       console.error('Failed to fetch institutions:', error);
       throw new Error('Failed to fetch institutions');
