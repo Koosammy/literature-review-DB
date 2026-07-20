@@ -7,6 +7,7 @@ import ScrollToTop from './components/ScrollToTop';
 import HomePage from './pages/HomePage';
 import ProjectsPage from './pages/ProjectsPage';
 import ProjectDetailPage from './pages/ProjectDetailPage';
+import ErrorBoundary, { reportClientError } from './components/ErrorBoundary';
 
 // Create Material-UI theme
 const theme = createTheme({
@@ -59,9 +60,26 @@ const theme = createTheme({
   },
 });
 
+window.addEventListener('error', (event) => {
+  reportClientError({
+    message: event.message,
+    stack: event.error?.stack,
+    extra: { filename: event.filename, lineno: event.lineno, colno: event.colno },
+  });
+});
+
+window.addEventListener('unhandledrejection', (event) => {
+  reportClientError({
+    message: event.reason?.message || String(event.reason),
+    stack: event.reason?.stack,
+    extra: { type: 'unhandledrejection' },
+  });
+});
+
 function App() {
   return (
-    <ThemeProvider theme={theme}>
+    <ErrorBoundary>
+      <ThemeProvider theme={theme}>
       <CssBaseline />
       <Router>
         <ScrollToTop />
@@ -74,6 +92,7 @@ function App() {
         </Layout>
       </Router>
     </ThemeProvider>
+    </ErrorBoundary>
   );
 }
 
