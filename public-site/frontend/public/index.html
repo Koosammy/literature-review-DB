@@ -58,10 +58,6 @@
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:site" content="@UHASOfficial">
     
-    <!-- Critical CSS for faster rendering -->
-    <link rel="preload" href="%PUBLIC_URL%/static/css/main.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
-    <noscript><link rel="stylesheet" href="%PUBLIC_URL%/static/css/main.css"></noscript>
-    
     <!-- Preload key fonts for better performance -->
     <link rel="preload" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" as="style" onload="this.onload=null;this.rel='stylesheet'">
     <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"></noscript>
@@ -104,12 +100,8 @@
         min-height: 100vh;
       }
       
-      /* Prevent flash of unstyled content */
-      .loading {
-        opacity: 0;
-        transition: opacity 0.3s ease;
-      }
-      
+      /* Keep app content visible even if non-critical assets are slow. */
+      .loading,
       .loaded {
         opacity: 1;
       }
@@ -140,21 +132,33 @@
     
     <!-- Add loading script -->
     <script>
-      // Remove loading class when React app loads
-      window.addEventListener('load', function() {
-        document.getElementById('root').classList.remove('loading');
-        document.getElementById('root').classList.add('loaded');
-      });
+      // Remove loading class as soon as the DOM is ready. Do not wait for every
+      // image/font request because a slow optional asset should not blank the app.
+      function markAppLoaded() {
+        var root = document.getElementById('root');
+        if (!root) return;
+        root.classList.remove('loading');
+        root.classList.add('loaded');
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', markAppLoaded);
+      } else {
+        markAppLoaded();
+      }
       
-      // Service worker registration for better mobile performance
+      // Remove any previously registered service worker so stale cached bundles
+      // cannot hide the current deployment or blank client-side routes.
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', function() {
-          navigator.serviceWorker.register('/sw.js')
-            .then(function(registration) {
-              console.log('SW registered: ', registration);
+          navigator.serviceWorker.getRegistrations()
+            .then(function(registrations) {
+              registrations.forEach(function(registration) {
+                registration.unregister();
+              });
             })
-            .catch(function(registrationError) {
-              console.log('SW registration failed: ', registrationError);
+            .catch(function(error) {
+              console.log('SW cleanup failed: ', error);
             });
         });
       }
