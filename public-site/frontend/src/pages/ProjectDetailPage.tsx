@@ -50,7 +50,7 @@ import {
   GridView as GridViewIcon,
   ViewCarousel as ViewCarouselIcon,
 } from '@mui/icons-material';
-import { apiService } from '../services/api';
+import { apiService, cleanBaseUrl } from '../services/api';
 import DocumentViewer from '../components/DocumentViewer';
 import SEOHead from '../components/SEOHead';
 import StructuredData from '../components/StructuredData';
@@ -1086,11 +1086,6 @@ const ProjectDetailPage: React.FC = () => {
 
   const handleViewDocument = () => {
     if (!project) return;
-    
-    const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
-    const cleanBaseUrl = API_BASE_URL.endsWith('/api') 
-      ? API_BASE_URL.slice(0, -4) 
-      : API_BASE_URL.replace(/\/$/, '');
     
     const viewUrl = `${cleanBaseUrl}/api/projects/${project.slug}/view-document`;
     window.open(viewUrl, '_blank');

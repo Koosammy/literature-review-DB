@@ -1,3 +1,5 @@
+import { cleanBaseUrl } from '../config/api';
+
 export interface ProjectImage {
   id: number;
   project_id: number;
@@ -132,11 +134,6 @@ export const IMAGE_CONSTANTS = {
 
 // Helper function to get image URL
 export function getProjectImageUrl(projectId: number, imageId: number): string {
-  const baseUrl = process.env.REACT_APP_API_URL || '';
-  
-  // Remove trailing slash if present
-  const cleanBaseUrl = baseUrl.replace(/\/$/, '');
-  
   // Check if baseUrl already contains /api
   if (cleanBaseUrl.includes('/api')) {
     return `${cleanBaseUrl}/projects/${projectId}/images/${imageId}`;
@@ -169,9 +166,6 @@ export function getFeaturedImageUrl(project: Project | ProjectSummary): string |
     }
     
     // Otherwise, prepend the base URL
-    const baseUrl = process.env.REACT_APP_API_URL || '';
-    const cleanBaseUrl = baseUrl.replace(/\/$/, '');
-    
     // If the image URL already starts with /api, don't add base URL's /api
     if (imageUrl.startsWith('/api') && cleanBaseUrl.includes('/api')) {
       return cleanBaseUrl.replace('/api', '') + imageUrl;
