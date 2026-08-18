@@ -1,6 +1,9 @@
+import asyncio
 import logging
 import secrets
+import socket
 import string
+from contextlib import contextmanager
 from email.message import EmailMessage
 from typing import Optional
 
@@ -10,6 +13,28 @@ from pydantic import EmailStr
 from .config import settings
 
 logger = logging.getLogger(__name__)
+
+_orig_getaddrinfo = socket.getaddrinfo
+
+
+def _ipv4_only_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
+    """Filter DNS results down to IPv4. Some hosts (e.g. Render) have
+    unroutable outbound IPv6 -- when smtp.gmail.com resolves to an IPv6
+    address first, the connection attempt hangs until the full timeout
+    instead of falling back to IPv4, producing SMTPConnectTimeoutError
+    even though the server is reachable over IPv4."""
+    results = _orig_getaddrinfo(host, port, family, type, proto, flags)
+    ipv4_results = [r for r in results if r[0] == socket.AF_INET]
+    return ipv4_results or results
+
+
+@contextmanager
+def _force_ipv4_dns():
+    socket.getaddrinfo = _ipv4_only_getaddrinfo
+    try:
+        yield
+    finally:
+        socket.getaddrinfo = _orig_getaddrinfo
 
 # Gmail SMTP configuration -- reuses the Settings fields that already exist
 # for this (MAIL_USERNAME/MAIL_PASSWORD/MAIL_SERVER/MAIL_PORT/...), which
@@ -63,26 +88,37 @@ async def send_email_smtp(
     message.set_content("This email requires an HTML-capable email client to view.")
     message.add_alternative(html_content, subtype="html")
 
-    try:
-        logger.info(f"📧 Sending email via SMTP ({settings.MAIL_SERVER}) to {to_email}")
+    attempts = 3
+    for attempt in range(1, attempts + 1):
+        try:
+            logger.info(f"📧 Sending email via SMTP ({settings.MAIL_SERVER}) to {to_email} (attempt {attempt}/{attempts})")
 
-        await aiosmtplib.send(
-            message,
-            hostname=settings.MAIL_SERVER,
-            port=settings.MAIL_PORT,
-            username=settings.MAIL_USERNAME,
-            password=settings.MAIL_PASSWORD,
-            start_tls=settings.MAIL_STARTTLS,
-            use_tls=settings.MAIL_SSL_TLS,
-            validate_certs=settings.VALIDATE_CERTS,
-            timeout=30.0,
-        )
-        logger.info(f"✅ Email sent successfully to {to_email}")
-        return True
+            with _force_ipv4_dns():
+                await aiosmtplib.send(
+                    message,
+                    hostname=settings.MAIL_SERVER,
+                    port=settings.MAIL_PORT,
+                    username=settings.MAIL_USERNAME,
+                    password=settings.MAIL_PASSWORD,
+                    start_tls=settings.MAIL_STARTTLS,
+                    use_tls=settings.MAIL_SSL_TLS,
+                    validate_certs=settings.VALIDATE_CERTS,
+                    timeout=15.0,
+                )
+            logger.info(f"✅ Email sent successfully to {to_email}")
+            return True
 
-    except Exception as e:
-        logger.error(f"❌ Failed to send email: {type(e).__name__}: {e}")
-        return False
+        except aiosmtplib.SMTPAuthenticationError as e:
+            # Credentials are wrong -- retrying won't help, fail fast.
+            logger.error(f"❌ Failed to send email: {type(e).__name__}: {e}")
+            return False
+
+        except Exception as e:
+            logger.error(f"❌ Failed to send email (attempt {attempt}/{attempts}): {type(e).__name__}: {e}")
+            if attempt < attempts:
+                await asyncio.sleep(2 * attempt)
+
+    return False
 
 
 async def send_password_reset_email(email: EmailStr, username: str, reset_url: str) -> bool:
@@ -310,17 +346,18 @@ async def test_email_connection() -> dict:
 
     if EMAIL_CONFIGURED:
         try:
-            smtp = aiosmtplib.SMTP(
-                hostname=settings.MAIL_SERVER,
-                port=settings.MAIL_PORT,
-                start_tls=settings.MAIL_STARTTLS,
-                use_tls=settings.MAIL_SSL_TLS,
-                validate_certs=settings.VALIDATE_CERTS,
-                timeout=15.0,
-            )
-            await smtp.connect()
-            await smtp.login(settings.MAIL_USERNAME, settings.MAIL_PASSWORD)
-            await smtp.quit()
+            with _force_ipv4_dns():
+                smtp = aiosmtplib.SMTP(
+                    hostname=settings.MAIL_SERVER,
+                    port=settings.MAIL_PORT,
+                    start_tls=settings.MAIL_STARTTLS,
+                    use_tls=settings.MAIL_SSL_TLS,
+                    validate_certs=settings.VALIDATE_CERTS,
+                    timeout=15.0,
+                )
+                await smtp.connect()
+                await smtp.login(settings.MAIL_USERNAME, settings.MAIL_PASSWORD)
+                await smtp.quit()
             result["status"] = "✅ Connected and authenticated"
         except Exception as e:
             result["status"] = f"❌ {type(e).__name__}: {str(e)}"
