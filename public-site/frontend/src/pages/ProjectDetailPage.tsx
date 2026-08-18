@@ -54,7 +54,8 @@ import { apiService, cleanBaseUrl } from '../services/api';
 import DocumentViewer from '../components/DocumentViewer';
 import SEOHead from '../components/SEOHead';
 import StructuredData from '../components/StructuredData';
-import { getProjectImageUrl } from '../types';
+import SupervisorSection from '../components/SupervisorSection';
+import { getProjectImageUrl, SupervisorBrief } from '../types';
 
 // Update the Project interface
 interface ProjectImage {
@@ -74,6 +75,7 @@ interface Project {
   institution?: string;
   department?: string;
   supervisor?: string;
+  supervisors?: SupervisorBrief[];
   abstract?: string;
   keywords?: string;
   research_area?: string;
@@ -1637,21 +1639,10 @@ const ProjectDetailPage: React.FC = () => {
                     </Box>
                   )}
 
-                  {project.supervisor && (
-                    <Box sx={{
-                      p: { xs: 1.5, sm: 2 },
-                      bgcolor: 'rgba(76, 175, 80, 0.05)',
-                      borderRadius: 2,
-                      border: '1px solid #e8f5e9'
-                    }}>
-                      <Typography variant="body2" sx={{ color: '#388e3c', fontWeight: 600, mb: 1, fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>
-                        Research Supervisor(s)
-                      </Typography>
-                      <Typography variant={isMobile ? "body2" : "body1"} sx={{ color: '#2e7d32', fontWeight: 600, fontSize: { xs: '0.875rem', sm: '1rem' } }}>
-                        {project.supervisor}
-                      </Typography>
-                    </Box>
-                  )}
+                  <SupervisorSection
+                    supervisors={project.supervisors || []}
+                    legacyText={project.supervisor}
+                  />
 
                   <Box sx={{
                     p: { xs: 1.5, sm: 2 },

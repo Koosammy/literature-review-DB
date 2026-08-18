@@ -36,6 +36,29 @@ def create_slug(title: str) -> str:
     slug = re.sub(r'[-\s]+', '-', slug)
     return slug.strip('-')
 
+def parse_supervisor_ids(raw: Optional[str]) -> Optional[List[int]]:
+    """Parse the comma-separated `supervisor_user_ids` form field.
+
+    Returns None when the field wasn't sent at all (so the caller can tell
+    "leave supervisors alone" apart from "clear them"), and an empty list
+    when it was sent but blank (explicitly clear).
+    """
+    if raw is None:
+        return None
+    ids = []
+    for part in raw.split(','):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            ids.append(int(part))
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid supervisor id: {part!r}"
+            )
+    return ids
+
 # Background task for image extraction
 async def extract_images_background(
     document_data: bytes,
@@ -93,6 +116,7 @@ def serialize_project(project: Project, include_images: bool = True) -> dict:
             "updated_at": project.updated_at.isoformat() if project.updated_at else None,
             "created_by_id": project.created_by_id,
             "created_by": None,
+            "supervisors": [],
             "image_records": [],
             "images": [],  # Legacy field for backward compatibility
             "featured_image_index": 0,  # Legacy field
@@ -108,7 +132,20 @@ def serialize_project(project: Project, include_images: bool = True) -> dict:
                 "email": project.created_by_user.email,
                 "full_name": project.created_by_user.full_name
             }
-        
+
+        # Add linked supervisor accounts, if any
+        if hasattr(project, 'supervisors') and project.supervisors:
+            result["supervisors"] = [
+                {
+                    "id": s.id,
+                    "title": s.title,
+                    "full_name": s.full_name,
+                    "institution": s.institution,
+                    "profile_image": s.profile_image,
+                }
+                for s in project.supervisors
+            ]
+
         # Add images if requested and available
         if include_images and hasattr(project, 'image_records'):
             try:
@@ -178,7 +215,8 @@ async def get_projects(
         # Use eager loading to avoid N+1 queries
         query = db.query(Project).options(
             joinedload(Project.created_by_user),
-            joinedload(Project.image_records)
+            joinedload(Project.image_records),
+            joinedload(Project.supervisors)
         )
         
         # Apply filters
@@ -234,7 +272,8 @@ async def get_project(
         # Use eager loading
         project = db.query(Project).options(
             joinedload(Project.created_by_user),
-            joinedload(Project.image_records)
+            joinedload(Project.image_records),
+            joinedload(Project.supervisors)
         ).filter(Project.id == project_id).first()
         
         if not project:
@@ -266,6 +305,7 @@ async def create_project(
     custom_institution: Optional[str] = Form(None),
     department: Optional[str] = Form(None),
     supervisor: Optional[str] = Form(None),
+    supervisor_user_ids: Optional[str] = Form(None),
     author_name: str = Form(...),
     author_email: Optional[str] = Form(None),
     meta_description: Optional[str] = Form(None),
@@ -366,10 +406,14 @@ async def create_project(
             download_count=0
         )
         
+        supervisor_ids = parse_supervisor_ids(supervisor_user_ids)
+        if supervisor_ids:
+            db_project.supervisors = db.query(User).filter(User.id.in_(supervisor_ids)).all()
+
         db.add(db_project)
         db.commit()
         db.refresh(db_project)
-        
+
         print(f"✅ Project created successfully: {db_project.slug}")
         
         # Schedule image extraction as background task if document was uploaded
@@ -386,7 +430,8 @@ async def create_project(
         # Load relationships for response
         db_project = db.query(Project).options(
             joinedload(Project.created_by_user),
-            joinedload(Project.image_records)
+            joinedload(Project.image_records),
+            joinedload(Project.supervisors)
         ).filter(Project.id == db_project.id).first()
         
         return serialize_project(db_project, include_images=True)
@@ -416,6 +461,7 @@ async def update_project(
     custom_institution: Optional[str] = Form(None),
     department: Optional[str] = Form(None),
     supervisor: Optional[str] = Form(None),
+    supervisor_user_ids: Optional[str] = Form(None),
     author_name: Optional[str] = Form(None),
     author_email: Optional[str] = Form(None),
     meta_description: Optional[str] = Form(None),
@@ -489,6 +535,11 @@ async def update_project(
             project.department = department
         if supervisor is not None:
             project.supervisor = supervisor
+        supervisor_ids = parse_supervisor_ids(supervisor_user_ids)
+        if supervisor_ids is not None:
+            project.supervisors = (
+                db.query(User).filter(User.id.in_(supervisor_ids)).all() if supervisor_ids else []
+            )
         if author_name is not None:
             project.author_name = author_name
         if author_email is not None:
@@ -548,7 +599,8 @@ async def update_project(
         # Load relationships for response
         project = db.query(Project).options(
             joinedload(Project.created_by_user),
-            joinedload(Project.image_records)
+            joinedload(Project.image_records),
+            joinedload(Project.supervisors)
         ).filter(Project.id == project_id).first()
         
         return serialize_project(project, include_images=True)
@@ -1262,7 +1314,8 @@ async def advanced_search(
     try:
         query = db.query(Project).options(
             joinedload(Project.created_by_user),
-            joinedload(Project.image_records)
+            joinedload(Project.image_records),
+            joinedload(Project.supervisors)
         )
         
         # Apply user filter if not main coordinator

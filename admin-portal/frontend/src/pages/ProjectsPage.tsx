@@ -37,8 +37,6 @@ import {
   Skeleton,
   InputAdornment,
   Divider,
-  Tabs,
-  Tab,
   Badge,
   Snackbar,
   Toolbar,
@@ -46,7 +44,11 @@ import {
   ToggleButtonGroup,
   Menu,
   ListItemIcon,
-  ListItemText
+  ListItemText,
+  Autocomplete,
+  Stepper,
+  Step,
+  StepLabel
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -85,7 +87,7 @@ import {
 } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
 import { adminApi } from '../services/adminApi';
-import { Project, FormConstants } from '../types';
+import { Project, FormConstants, User } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { ResearchAreaSelect } from '../components/ResearchAreaSelect';
 import { ProjectImagesTab } from '../components/ProjectImagesTab';
@@ -100,6 +102,7 @@ interface ProjectFormData {
   institution: string;
   department: string;
   supervisor: string;
+  supervisor_user_ids: number[];
   author_name: string;
   author_email: string;
   is_published: boolean;
@@ -137,6 +140,7 @@ const ProjectsPage: React.FC = () => {
     institution: '',
     department: '',
     supervisor: '',
+    supervisor_user_ids: [],
     author_name: '',
     author_email: '',
     is_published: true,
@@ -147,6 +151,7 @@ const ProjectsPage: React.FC = () => {
   const [filterPublished, setFilterPublished] = useState<boolean | undefined>(undefined);
   const [researchAreas, setResearchAreas] = useState<string[]>([]);
   const [degreeTypes, setDegreeTypes] = useState<string[]>([]);
+  const [allUsers, setAllUsers] = useState<User[]>([]);
   const { user: currentUser } = useAuth();
   const theme = useTheme();
   const [snackbar, setSnackbar] = useState({ 
@@ -198,6 +203,12 @@ const ProjectsPage: React.FC = () => {
     loadFilterOptions();
     fetchFormConstants();
   }, [searchTerm, filterPublished]);
+
+  // Supervisor picker options -- fetched once, not tied to the project
+  // search/filter state above.
+  useEffect(() => {
+    adminApi.getUsers().then(setAllUsers).catch(() => setAllUsers([]));
+  }, []);
 
   // Update word and character count when abstract changes
   useEffect(() => {
@@ -257,6 +268,7 @@ const ProjectsPage: React.FC = () => {
         institution: project.institution || '',
         department: project.department || '',
         supervisor: project.supervisor || '',
+        supervisor_user_ids: (project.supervisors || []).map(s => s.id),
         author_name: project.author_name,
         author_email: project.author_email || '',
         is_published: project.is_published,
@@ -283,6 +295,7 @@ const ProjectsPage: React.FC = () => {
         institution: currentUser?.institution || '',
         department: currentUser?.department || '',
         supervisor: '',
+        supervisor_user_ids: [],
         author_name: '',
         author_email: '',
         is_published: true,
@@ -364,6 +377,19 @@ const ProjectsPage: React.FC = () => {
     }
   }, [selectedProjectForImages]);
 
+  const handleNextStep = () => {
+    if (!formData.title.trim()) {
+      setFormError('Title is required');
+      return;
+    }
+    if (!formData.author_name.trim()) {
+      setFormError('Author name is required');
+      return;
+    }
+    setFormError('');
+    setActiveTab('details');
+  };
+
   const handleSubmit = async () => {
     setFormError('');
     setSubmitting(true);
@@ -395,6 +421,7 @@ const ProjectsPage: React.FC = () => {
       submitData.append('institution', formData.institution || '');
       submitData.append('department', formData.department);
       submitData.append('supervisor', formData.supervisor);
+      submitData.append('supervisor_user_ids', formData.supervisor_user_ids.join(','));
       submitData.append('author_name', formData.author_name);
       submitData.append('author_email', formData.author_email);
       submitData.append('is_published', formData.is_published.toString());
@@ -1202,33 +1229,25 @@ const ProjectsPage: React.FC = () => {
         </DialogTitle>
 
         <DialogContent sx={{ px: 3 }}>
-          {/* Tab Navigation */}
-          <Tabs 
-            value={activeTab} 
-            onChange={(_, newValue) => setActiveTab(newValue)}
+          {/* Step indicator -- deliberately not clickable. Advancing past
+              "Basic Details" requires the Next button below, which
+              validates the step first (see handleNextStep). */}
+          <Stepper
+            activeStep={activeTab === 'basic' ? 0 : 1}
             sx={{
-              borderBottom: 1,
-              borderColor: 'divider',
               mb: 3,
-              '& .MuiTab-root': {
-                textTransform: 'none',
+              '& .MuiStepLabel-label': {
                 fontWeight: 600,
-                fontSize: '1rem',
-                minHeight: 48,
-                '&.Mui-selected': {
-                  color: '#0a4f3c',
-                },
+                '&.Mui-active': { color: '#0a4f3c' },
+                '&.Mui-completed': { color: '#0a4f3c' },
               },
-              '& .MuiTabs-indicator': {
-                backgroundColor: '#0a4f3c',
-                height: 3,
-              },
+              '& .MuiStepIcon-root.Mui-active': { color: '#0a4f3c' },
+              '& .MuiStepIcon-root.Mui-completed': { color: '#0a4f3c' },
             }}
           >
-            <Tab label="Basic Info" value="basic" />
-            <Tab label="Academic Details" value="details" />
-            <Tab label="Settings" value="settings" />
-          </Tabs>
+            <Step><StepLabel>Basic Details</StepLabel></Step>
+            <Step><StepLabel>Academic Details</StepLabel></Step>
+          </Stepper>
 
           {/* Error Alert */}
           <AnimatePresence>
@@ -1740,10 +1759,10 @@ const ProjectsPage: React.FC = () => {
                     
                     <Grid item xs={12} md={6}>
                       <FormControl fullWidth>
-                        <InputLabel>Institution</InputLabel>
+                        <InputLabel>School</InputLabel>
                         <Select
                           value={formData.institution || ''}
-                          label="Institution"
+                          label="School"
                           onChange={(e) => setFormData(prev => ({ ...prev, institution: e.target.value }))}
                           sx={{
                             borderRadius: 3,
@@ -1752,7 +1771,7 @@ const ProjectsPage: React.FC = () => {
                             },
                           }}
                         >
-                          <MenuItem value="">Select Institution</MenuItem>
+                          <MenuItem value="">Select School</MenuItem>
                           {formConstants.institutions.map((inst) => (
                             <MenuItem key={inst} value={inst}>
                               {inst}
@@ -1784,23 +1803,54 @@ const ProjectsPage: React.FC = () => {
                     </Grid>
                     
                     <Grid item xs={12}>
-                      <TextField
-                        label="Supervisor(s)"
-                        fullWidth
-                        variant="outlined"
-                        value={formData.supervisor}
-                        onChange={handleInputChange('supervisor')}
-                        sx={{
-                          '& .MuiOutlinedInput-root': {
-                            borderRadius: 3,
-                            '&.Mui-focused fieldset': {
-                              borderColor: '#0a4f3c',
-                            },
-                          },
-                          '& .MuiInputLabel-root.Mui-focused': {
-                            color: '#0a4f3c',
-                          },
-                        }}
+                      <Autocomplete
+                        multiple
+                        options={allUsers}
+                        getOptionLabel={(u) => [u.title, u.full_name].filter(Boolean).join(' ')}
+                        isOptionEqualToValue={(a, b) => a.id === b.id}
+                        value={allUsers.filter(u => formData.supervisor_user_ids.includes(u.id))}
+                        onChange={(_, selected) =>
+                          setFormData(prev => ({ ...prev, supervisor_user_ids: selected.map(u => u.id) }))
+                        }
+                        renderTags={(value, getTagProps) =>
+                          value.map((u, index) => {
+                            const { key, ...tagProps } = getTagProps({ index });
+                            return (
+                              <Chip
+                                key={key}
+                                avatar={<Avatar src={u.profile_image} sx={{ bgcolor: '#0a4f3c' }}>{u.full_name.charAt(0)}</Avatar>}
+                                label={[u.title, u.full_name].filter(Boolean).join(' ')}
+                                size="small"
+                                {...tagProps}
+                              />
+                            );
+                          })
+                        }
+                        renderInput={(params) => (
+                          <TextField
+                            {...params}
+                            label="Supervisor(s)"
+                            placeholder={formData.supervisor_user_ids.length ? '' : 'Search faculty by name...'}
+                            helperText={
+                              !allUsers.length
+                                ? 'No faculty accounts yet -- create some on the Users page first.'
+                                : (!formData.supervisor_user_ids.length && formData.supervisor
+                                    ? `Legacy value on record: "${formData.supervisor}" (unchanged until a supervisor is picked here)`
+                                    : undefined)
+                            }
+                            sx={{
+                              '& .MuiOutlinedInput-root': {
+                                borderRadius: 3,
+                                '&.Mui-focused fieldset': {
+                                  borderColor: '#0a4f3c',
+                                },
+                              },
+                              '& .MuiInputLabel-root.Mui-focused': {
+                                color: '#0a4f3c',
+                              },
+                            }}
+                          />
+                        )}
                       />
                     </Grid>
                   </Grid>
@@ -1899,13 +1949,9 @@ const ProjectsPage: React.FC = () => {
                     </Grid>
                   </Grid>
                 </Paper>
-              </>
-            )}
 
-            {/* Settings Tab */}
-            {activeTab === 'settings' && (
-              <>
-                {/* File Management Section */}
+                {/* File Management Section (formerly a separate "Settings" tab --
+                    folded in here so the wizard is just two steps) */}
                 <Paper
                   elevation={0}
                   sx={{
@@ -2052,7 +2098,7 @@ const ProjectsPage: React.FC = () => {
         </DialogContent>
 
         <DialogActions sx={{ p: 3, borderTop: '1px solid rgba(0,0,0,0.08)' }}>
-          <Button 
+          <Button
             onClick={handleCloseDialog}
             sx={{
               borderRadius: 3,
@@ -2066,31 +2112,62 @@ const ProjectsPage: React.FC = () => {
           >
             Cancel
           </Button>
-          <Button
-            onClick={handleSubmit}
-            variant="contained"
-            disabled={submitting}
-            startIcon={submitting ? <CircularProgress size={16} /> : (editingProject ? <EditIcon /> : <AddIcon />)}
-            sx={{
-              borderRadius: 3,
-              px: 4,
-              py: 1,
-              background: 'linear-gradient(135deg, #0a4f3c 0%, #2a9d7f 100%)',
-              textTransform: 'none',
-              fontWeight: 600,
-              boxShadow: '0 4px 12px rgba(10,79,60,0.3)',
-              '&:hover': {
-                background: 'linear-gradient(135deg, #063d2f 0%, #1a7a5e 100%)',
-                boxShadow: '0 6px 16px rgba(10,79,60,0.4)',
-              },
-              '&:disabled': {
-                background: alpha('#0a4f3c', 0.6),
-                color: 'white'
-              }
-            }}
-          >
-            {submitting ? 'Saving...' : (editingProject ? 'Update Project' : 'Create Project')}
-          </Button>
+
+          {activeTab === 'basic' ? (
+            <Button
+              onClick={handleNextStep}
+              variant="contained"
+              sx={{
+                borderRadius: 3,
+                px: 4,
+                py: 1,
+                background: 'linear-gradient(135deg, #0a4f3c 0%, #2a9d7f 100%)',
+                textTransform: 'none',
+                fontWeight: 600,
+                boxShadow: '0 4px 12px rgba(10,79,60,0.3)',
+                '&:hover': {
+                  background: 'linear-gradient(135deg, #063d2f 0%, #1a7a5e 100%)',
+                  boxShadow: '0 6px 16px rgba(10,79,60,0.4)',
+                },
+              }}
+            >
+              Next: Academic Details
+            </Button>
+          ) : (
+            <>
+              <Button
+                onClick={() => { setFormError(''); setActiveTab('basic'); }}
+                sx={{ borderRadius: 3, px: 3, py: 1, color: '#0a4f3c' }}
+              >
+                Back
+              </Button>
+              <Button
+                onClick={handleSubmit}
+                variant="contained"
+                disabled={submitting}
+                startIcon={submitting ? <CircularProgress size={16} /> : (editingProject ? <EditIcon /> : <AddIcon />)}
+                sx={{
+                  borderRadius: 3,
+                  px: 4,
+                  py: 1,
+                  background: 'linear-gradient(135deg, #0a4f3c 0%, #2a9d7f 100%)',
+                  textTransform: 'none',
+                  fontWeight: 600,
+                  boxShadow: '0 4px 12px rgba(10,79,60,0.3)',
+                  '&:hover': {
+                    background: 'linear-gradient(135deg, #063d2f 0%, #1a7a5e 100%)',
+                    boxShadow: '0 6px 16px rgba(10,79,60,0.4)',
+                  },
+                  '&:disabled': {
+                    background: alpha('#0a4f3c', 0.6),
+                    color: 'white'
+                  }
+                }}
+              >
+                {submitting ? 'Saving...' : (editingProject ? 'Update Project' : 'Create Project')}
+              </Button>
+            </>
+          )}
         </DialogActions>
       </Dialog>
 

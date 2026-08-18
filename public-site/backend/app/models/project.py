@@ -1,6 +1,16 @@
-from sqlalchemy import Column, String, Text, Boolean, Integer, DateTime, func, LargeBinary, JSON, ForeignKey
+from sqlalchemy import Column, String, Text, Boolean, Integer, DateTime, func, LargeBinary, JSON, ForeignKey, Table
 from sqlalchemy.orm import relationship
 from .base import Base
+
+# Mirrors admin-portal's project_supervisors join table (same physical
+# table; owned/created by admin-portal, see main.py's create_all scoping).
+project_supervisors = Table(
+    "project_supervisors",
+    Base.metadata,
+    Column("project_id", Integer, ForeignKey("projects.id", ondelete="CASCADE"), primary_key=True),
+    Column("user_id", Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True),
+)
+
 
 class Project(Base):
     __tablename__ = "projects"
@@ -55,9 +65,17 @@ class Project(Base):
     
     # User Relationship (simplified for public site)
     created_by_id = Column(Integer, nullable=True)
-    
+
     # Relationship to images
     image_records = relationship("ProjectImage", back_populates="project", order_by="ProjectImage.order_index")
+
+    # Linked supervisor accounts (falls back to the free-text `supervisor`
+    # column above for projects that predate this relationship).
+    supervisors = relationship(
+        "User",
+        secondary=project_supervisors,
+        back_populates="supervised_projects",
+    )
 
 
 class ProjectImage(Base):

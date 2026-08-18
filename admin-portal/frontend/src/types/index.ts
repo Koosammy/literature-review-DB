@@ -10,6 +10,14 @@ export interface ProjectImage {
   image_url?: string;  // Make it optional since we'll compute it if not provided
 }
 
+export interface SupervisorBrief {
+  id: number;
+  title?: string;
+  full_name: string;
+  institution?: string;
+  profile_image?: string;
+}
+
 export interface Project {
   id: number;
   title: string;
@@ -22,6 +30,7 @@ export interface Project {
   institution?: string;
   department?: string;
   supervisor?: string;
+  supervisors?: SupervisorBrief[];
   author_name: string;
   author_email?: string;
   meta_description?: string;
@@ -84,6 +93,7 @@ export interface User {
   username: string;
   email: string;
   full_name: string;
+  title?: string;
   institution?: string;
   department?: string;
   phone?: string;
@@ -91,6 +101,7 @@ export interface User {
   disciplines?: string;  // Added
   role: string;
   is_active: boolean;
+  must_set_password?: boolean;
   created_at: string;
   profile_image?: string;
 }

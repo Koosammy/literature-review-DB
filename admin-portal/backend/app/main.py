@@ -380,6 +380,35 @@ async def serve_spa(request: Request, full_path: str):
 # Create tables
 Base.metadata.create_all(bind=engine)
 
+
+def _apply_lightweight_migrations() -> None:
+    """Add columns that `create_all` can't add to already-existing tables.
+
+    This project deploys by running `create_all` at import time rather than
+    an Alembic migration step, so a new Column on an existing model (e.g.
+    User.title) never actually reaches the production table on its own.
+    Each statement is idempotent (IF NOT EXISTS) and independently guarded
+    so one failure (e.g. insufficient privileges) doesn't block the rest.
+    """
+    from sqlalchemy import text
+
+    statements = [
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS title VARCHAR(20)",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS must_set_password BOOLEAN NOT NULL DEFAULT FALSE",
+    ]
+    # A separate connection/transaction per statement: on Postgres, one
+    # failed statement aborts the rest of its transaction, so sharing one
+    # connection across statements would make them not-actually-independent.
+    for statement in statements:
+        try:
+            with engine.begin() as conn:
+                conn.execute(text(statement))
+        except Exception as exc:
+            print(f"⚠️ Migration step failed ({statement}): {exc}")
+
+
+_apply_lightweight_migrations()
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(

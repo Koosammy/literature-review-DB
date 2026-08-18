@@ -12,6 +12,10 @@ class Settings(BaseSettings):
     
     # SEO
     SITE_URL: str = "https://uhas-research-hub.onrender.com"
+
+    # Admin-portal backend, for building absolute URLs to assets it serves
+    # (currently: supervisor profile photos, uploaded under /api/uploads).
+    ADMIN_BACKEND_URL: str = "https://literature-admin-backend.onrender.com"
     
     # Storage Backend
     STORAGE_BACKEND: str = "database"  # Changed from supabase

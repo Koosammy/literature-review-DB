@@ -50,6 +50,12 @@ class PasswordResetConfirm(BaseModel):
 
 class PasswordResetResponse(BaseModel):
     message: str
+    # Populated on a successful /reset-password so the frontend can log the
+    # user straight in afterward -- most useful for the activation flow,
+    # where this doubles as "account activated, here's your session".
+    access_token: Optional[str] = None
+    token_type: Optional[str] = None
+    user: Optional[Dict[str, Any]] = None
 
 class TokenVerificationResponse(BaseModel):
     valid: bool
@@ -65,10 +71,13 @@ class UserInfo(BaseModel):
     username: str
     email: str
     full_name: str
+    title: Optional[str] = None
     role: str
     institution: Optional[str]
     department: Optional[str]
+    profile_image: Optional[str] = None
     is_active: bool
+    must_set_password: bool = False
     created_at: datetime
 
 # Helper functions
@@ -153,6 +162,16 @@ async def login(
             headers={"WWW-Authenticate": "Bearer"},
         )
     
+    # Accounts created via admin invite / bulk import have an unusable
+    # placeholder password until activation, so this would fail anyway --
+    # checked first purely to give a clearer, actionable error message.
+    if user.must_set_password:
+        logger.info(f"Login blocked - account not yet activated: {user.username}")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Please activate your account using the link emailed to you before signing in."
+        )
+
     if not verify_password(form_data.password, user.hashed_password):
         logger.warning(f"Login failed - incorrect password for user: {user.username}")
         raise HTTPException(
@@ -160,7 +179,7 @@ async def login(
             detail="Incorrect username/email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
+
     # Check if user is active
     if not user.is_active:
         logger.warning(f"Login failed - inactive user: {user.username}")
@@ -168,12 +187,12 @@ async def login(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="User account is inactive. Please contact an administrator."
         )
-    
+
     # Create access token
     access_token = create_access_token(data={"sub": user.username})
-    
+
     logger.info(f"Login successful for user: {user.username}")
-    
+
     return LoginResponse(
         access_token=access_token,
         token_type="bearer",
@@ -182,10 +201,13 @@ async def login(
             "username": user.username,
             "email": user.email,
             "full_name": user.full_name,
+            "title": user.title,
             "role": user.role,
             "institution": user.institution,
             "department": user.department,
+            "profile_image": user.profile_image,
             "is_active": user.is_active,
+            "must_set_password": user.must_set_password,
             "is_main_coordinator": user.is_main_coordinator
         }
     )
@@ -282,7 +304,9 @@ async def reset_password(
     
     # Update password
     try:
+        was_activation = user.must_set_password
         user.hashed_password = get_password_hash(request.new_password)
+        user.must_set_password = False
         user.clear_reset_token()
         db.commit()
         logger.info(f"Password reset successful for user: {user.username}")
@@ -293,9 +317,34 @@ async def reset_password(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to reset password"
         )
-    
+
+    # Log the user straight in -- for the activation flow, the frontend
+    # uses this token immediately to upload the (mandatory) profile photo
+    # without making the user log in a second time right after setting up.
+    access_token = create_access_token(data={"sub": user.username})
+
     return PasswordResetResponse(
-        message="Password has been successfully reset. You can now login with your new password."
+        message=(
+            "Your account is now active."
+            if was_activation
+            else "Password has been successfully reset. You can now login with your new password."
+        ),
+        access_token=access_token,
+        token_type="bearer",
+        user={
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "full_name": user.full_name,
+            "title": user.title,
+            "role": user.role,
+            "institution": user.institution,
+            "department": user.department,
+            "profile_image": user.profile_image,
+            "is_active": user.is_active,
+            "must_set_password": user.must_set_password,
+            "is_main_coordinator": user.is_main_coordinator,
+        },
     )
 
 @router.get("/verify-reset-token", response_model=TokenVerificationResponse, status_code=status.HTTP_200_OK)
@@ -350,10 +399,13 @@ async def get_current_user_info(
         username=current_user.username,
         email=current_user.email,
         full_name=current_user.full_name,
+        title=current_user.title,
         role=current_user.role,
         institution=current_user.institution,
         department=current_user.department,
+        profile_image=current_user.profile_image,
         is_active=current_user.is_active,
+        must_set_password=current_user.must_set_password,
         created_at=current_user.created_at
     )
 

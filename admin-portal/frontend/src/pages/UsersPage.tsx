@@ -32,7 +32,12 @@ import {
   useTheme,
   InputAdornment,
   Skeleton,
-  Divider
+  Divider,
+  Snackbar,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemIcon
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -51,23 +56,27 @@ import {
   AdminPanelSettings as AdminIcon,
   PersonAdd as PersonAddIcon,
   Close as CloseIcon,
-  Visibility as VisibilityIcon,
-  VisibilityOff as VisibilityOffIcon
+  UploadFile as UploadFileIcon,
+  HourglassEmpty as PendingIcon,
+  Send as SendIcon,
+  CheckCircle as CheckCircleIcon,
+  ErrorOutline as ErrorOutlineIcon
 } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
-import { adminApi } from '../services/adminApi';
+import { adminApi, BulkImportResult } from '../services/adminApi';
 import { User } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 
+const TITLE_OPTIONS = ['Dr.', 'Prof.', 'Mr.', 'Mrs.', 'Ms.'];
+
 interface UserFormData {
-  username: string;
   email: string;
   full_name: string;
+  title: string;
   institution: string;
   department: string;
   phone: string;
   role: string;
-  password?: string;
 }
 
 const UsersPage: React.FC = () => {
@@ -79,24 +88,34 @@ const UsersPage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('');
-  const [showPassword, setShowPassword] = useState(false);
+  const [schools, setSchools] = useState<string[]>([]);
   const [formData, setFormData] = useState<UserFormData>({
-    username: '',
     email: '',
     full_name: '',
+    title: '',
     institution: '',
     department: '',
     phone: '',
     role: 'faculty',
-    password: ''
   });
   const [formError, setFormError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+
+  const [excelDialogOpen, setExcelDialogOpen] = useState(false);
+  const [excelFile, setExcelFile] = useState<File | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<BulkImportResult | null>(null);
+  const [importError, setImportError] = useState('');
+
+  const [resendingId, setResendingId] = useState<number | null>(null);
+
   const { user: currentUser } = useAuth();
   const theme = useTheme();
 
   useEffect(() => {
     loadUsers();
+    adminApi.getInstitutions().then(setSchools).catch(() => setSchools([]));
   }, []);
 
   const loadUsers = async () => {
@@ -114,9 +133,9 @@ const UsersPage: React.FC = () => {
     if (user) {
       setEditingUser(user);
       setFormData({
-        username: user.username,
         email: user.email,
         full_name: user.full_name,
+        title: user.title || '',
         institution: user.institution || '',
         department: user.department || '',
         phone: user.phone || '',
@@ -125,14 +144,13 @@ const UsersPage: React.FC = () => {
     } else {
       setEditingUser(null);
       setFormData({
-        username: '',
         email: '',
         full_name: '',
+        title: '',
         institution: '',
         department: '',
         phone: '',
         role: 'faculty',
-        password: ''
       });
     }
     setFormError('');
@@ -143,7 +161,6 @@ const UsersPage: React.FC = () => {
     setOpenDialog(false);
     setEditingUser(null);
     setFormError('');
-    setShowPassword(false);
   };
 
   const handleDeleteUser = async (userId: number) => {
@@ -197,65 +214,95 @@ const UsersPage: React.FC = () => {
       return;
     }
 
-    if (!formData.username.trim()) {
-      setFormError('Username is required');
-      setSubmitting(false);
-      return;
-    }
-
-    if (formData.username.length < 3) {
-      setFormError('Username must be at least 3 characters long');
-      setSubmitting(false);
-      return;
-    }
-
     if (!formData.email.trim()) {
       setFormError('Email is required');
       setSubmitting(false);
       return;
     }
 
-    if (!editingUser && (!formData.password || formData.password.length < 6)) {
-      setFormError('Password must be at least 6 characters long');
-      setSubmitting(false);
-      return;
-    }
-
     try {
       if (editingUser) {
-        const { password, ...updateData } = formData;
-        await adminApi.updateUser(editingUser.id, updateData);
-      } else {
-        const userData = {
-          username: formData.username.trim(),
-          email: formData.email.trim(),
+        await adminApi.updateUser(editingUser.id, {
           full_name: formData.full_name.trim(),
-          institution: formData.institution.trim() || null,
+          email: formData.email.trim(),
+          title: formData.title || null,
+          institution: formData.institution || null,
           department: formData.department.trim() || null,
           phone: formData.phone.trim() || null,
           role: formData.role,
-          password: formData.password
+        });
+      } else {
+        const userData = {
+          email: formData.email.trim(),
+          full_name: formData.full_name.trim(),
+          title: formData.title || null,
+          institution: formData.institution || null,
+          department: formData.department.trim() || null,
+          phone: formData.phone.trim() || null,
+          role: formData.role,
         };
-        
+
         await adminApi.createUser(userData);
+        setSuccessMessage(`Invitation sent to ${userData.email}`);
       }
-      
+
       await loadUsers();
       handleCloseDialog();
     } catch (err: any) {
       console.error('Error creating user:', err);
-      
+
       let errorMessage = 'Failed to save user';
-      
+
       if (err.message) {
         errorMessage = err.message;
       } else if (err.response?.data?.detail) {
         errorMessage = err.response.data.detail;
       }
-      
+
       setFormError(errorMessage);
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleResendInvite = async (userId: number) => {
+    setResendingId(userId);
+    try {
+      const result = await adminApi.resendUserInvite(userId);
+      setSuccessMessage(result.message);
+    } catch (err: any) {
+      setError(err.message || err.response?.data?.detail || 'Failed to resend invitation');
+    } finally {
+      setResendingId(null);
+    }
+  };
+
+  const handleOpenExcelDialog = () => {
+    setExcelFile(null);
+    setImportResult(null);
+    setImportError('');
+    setExcelDialogOpen(true);
+  };
+
+  const handleCloseExcelDialog = () => {
+    setExcelDialogOpen(false);
+    setExcelFile(null);
+    setImportResult(null);
+    setImportError('');
+  };
+
+  const handleExcelImport = async () => {
+    if (!excelFile) return;
+    setImporting(true);
+    setImportError('');
+    try {
+      const result = await adminApi.bulkImportUsers(excelFile);
+      setImportResult(result);
+      await loadUsers();
+    } catch (err: any) {
+      setImportError(err.message || err.response?.data?.detail || 'Failed to import users');
+    } finally {
+      setImporting(false);
     }
   };
 
@@ -353,29 +400,52 @@ const UsersPage: React.FC = () => {
               </Typography>
             </Box>
             
-            <Button
-              variant="contained"
-              size="large"
-              startIcon={<PersonAddIcon />}
-              onClick={() => handleOpenDialog()}
-              sx={{
-                px: 4,
-                py: 1.5,
-                borderRadius: 3,
-                background: 'linear-gradient(135deg, #0a4f3c 0%, #2a9d7f 100%)',
-                textTransform: 'none',
-                fontWeight: 600,
-                boxShadow: '0 8px 24px rgba(10,79,60,0.3)',
-                '&:hover': {
-                  background: 'linear-gradient(135deg, #063d2f 0%, #1a7a5e 100%)',
-                  boxShadow: '0 12px 32px rgba(10,79,60,0.4)',
-                  transform: 'translateY(-2px)'
-                },
-                transition: 'all 0.3s ease'
-              }}
-            >
-              Add New User
-            </Button>
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              <Button
+                variant="outlined"
+                size="large"
+                startIcon={<UploadFileIcon />}
+                onClick={handleOpenExcelDialog}
+                sx={{
+                  px: 3,
+                  py: 1.5,
+                  borderRadius: 3,
+                  borderColor: '#0a4f3c',
+                  color: '#0a4f3c',
+                  textTransform: 'none',
+                  fontWeight: 600,
+                  '&:hover': {
+                    borderColor: '#063d2f',
+                    bgcolor: alpha('#0a4f3c', 0.04)
+                  }
+                }}
+              >
+                Create from Excel
+              </Button>
+              <Button
+                variant="contained"
+                size="large"
+                startIcon={<PersonAddIcon />}
+                onClick={() => handleOpenDialog()}
+                sx={{
+                  px: 4,
+                  py: 1.5,
+                  borderRadius: 3,
+                  background: 'linear-gradient(135deg, #0a4f3c 0%, #2a9d7f 100%)',
+                  textTransform: 'none',
+                  fontWeight: 600,
+                  boxShadow: '0 8px 24px rgba(10,79,60,0.3)',
+                  '&:hover': {
+                    background: 'linear-gradient(135deg, #063d2f 0%, #1a7a5e 100%)',
+                    boxShadow: '0 12px 32px rgba(10,79,60,0.4)',
+                    transform: 'translateY(-2px)'
+                  },
+                  transition: 'all 0.3s ease'
+                }}
+              >
+                Add New User
+              </Button>
+            </Box>
           </Box>
 
           {/* Stats Cards */}
@@ -756,6 +826,19 @@ const UsersPage: React.FC = () => {
                               fontWeight: 600
                             }}
                           />
+                          {user.must_set_password && (
+                            <Chip
+                              icon={<PendingIcon sx={{ fontSize: 16 }} />}
+                              label="Pending Activation"
+                              size="small"
+                              sx={{
+                                bgcolor: alpha('#ff9800', 0.1),
+                                color: '#c77700',
+                                fontWeight: 600,
+                                '& .MuiChip-icon': { color: '#c77700' }
+                              }}
+                            />
+                          )}
                         </Box>
                       </TableCell>
                       
@@ -786,7 +869,30 @@ const UsersPage: React.FC = () => {
                               <EditIcon sx={{ fontSize: 18 }} />
                             </IconButton>
                           </Tooltip>
-                          
+
+                          {user.must_set_password && (
+                            <Tooltip title="Resend Activation Email">
+                              <IconButton
+                                size="small"
+                                onClick={() => handleResendInvite(user.id)}
+                                disabled={resendingId === user.id}
+                                sx={{
+                                  bgcolor: alpha('#ff9800', 0.1),
+                                  color: '#c77700',
+                                  '&:hover': {
+                                    bgcolor: alpha('#ff9800', 0.2)
+                                  }
+                                }}
+                              >
+                                {resendingId === user.id ? (
+                                  <CircularProgress size={18} sx={{ color: '#c77700' }} />
+                                ) : (
+                                  <SendIcon sx={{ fontSize: 18 }} />
+                                )}
+                              </IconButton>
+                            </Tooltip>
+                          )}
+
                           <Tooltip title={user.is_active ? 'Deactivate' : 'Activate'}>
                             <IconButton
                               size="small"
@@ -991,37 +1097,27 @@ const UsersPage: React.FC = () => {
                 </Grid>
                 
                 <Grid item xs={12} md={6}>
-                  <TextField
-                    label="Username"
-                    fullWidth
-                    variant="outlined"
-                    value={formData.username}
-                    onChange={handleInputChange('username')}
-                    required
-                    disabled={!!editingUser}
-                    InputProps={{
-                      startAdornment: (
-                        <InputAdornment position="start">
-                          <BadgeIcon sx={{ color: editingUser ? 'text.secondary' : '#0a4f3c' }} />
-                        </InputAdornment>
-                      ),
-                    }}
-                    helperText={editingUser ? "Username cannot be changed" : "Minimum 3 characters"}
-                    sx={{
-                      '& .MuiOutlinedInput-root': {
+                  <FormControl fullWidth>
+                    <InputLabel>Title</InputLabel>
+                    <Select
+                      value={formData.title}
+                      label="Title"
+                      onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
+                      sx={{
                         borderRadius: 3,
-                        bgcolor: editingUser ? alpha('#000', 0.02) : 'transparent',
-                        '&.Mui-focused fieldset': {
+                        '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
                           borderColor: '#0a4f3c',
                         },
-                      },
-                      '& .MuiInputLabel-root.Mui-focused': {
-                        color: '#0a4f3c',
-                      },
-                    }}
-                  />
+                      }}
+                    >
+                      <MenuItem value="">None</MenuItem>
+                      {TITLE_OPTIONS.map((t) => (
+                        <MenuItem key={t} value={t}>{t}</MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
                 </Grid>
-                
+
                 <Grid item xs={12}>
                   <TextField
                     label="Email Address"
@@ -1051,47 +1147,39 @@ const UsersPage: React.FC = () => {
                     }}
                   />
                 </Grid>
-                
-                {!editingUser && (
+
+                {editingUser && (
                   <Grid item xs={12}>
                     <TextField
-                      label="Password"
-                      type={showPassword ? 'text' : 'password'}
+                      label="Username"
                       fullWidth
                       variant="outlined"
-                      value={formData.password}
-                      onChange={handleInputChange('password')}
-                      required
+                      value={editingUser.username}
+                      disabled
                       InputProps={{
                         startAdornment: (
                           <InputAdornment position="start">
-                            <BadgeIcon sx={{ color: '#0a4f3c' }} />
-                          </InputAdornment>
-                        ),
-                        endAdornment: (
-                          <InputAdornment position="end">
-                            <IconButton
-                              onClick={() => setShowPassword(!showPassword)}
-                              edge="end"
-                            >
-                              {showPassword ? <VisibilityOffIcon /> : <VisibilityIcon />}
-                            </IconButton>
+                            <BadgeIcon sx={{ color: 'text.secondary' }} />
                           </InputAdornment>
                         ),
                       }}
-                      helperText="Minimum 6 characters"
+                      helperText="Generated automatically from the email address"
                       sx={{
                         '& .MuiOutlinedInput-root': {
                           borderRadius: 3,
-                          '&.Mui-focused fieldset': {
-                            borderColor: '#0a4f3c',
-                          },
-                        },
-                        '& .MuiInputLabel-root.Mui-focused': {
-                          color: '#0a4f3c',
+                          bgcolor: alpha('#000', 0.02),
                         },
                       }}
                     />
+                  </Grid>
+                )}
+
+                {!editingUser && (
+                  <Grid item xs={12}>
+                    <Alert severity="info" sx={{ borderRadius: 3 }}>
+                      No password to set here -- we'll email {formData.email || 'them'} a link to choose their
+                      own password and upload their profile photo before they can sign in.
+                    </Alert>
                   </Grid>
                 )}
               </Grid>
@@ -1113,33 +1201,27 @@ const UsersPage: React.FC = () => {
               </Typography>
               <Grid container spacing={3}>
                 <Grid item xs={12} md={6}>
-                  <TextField
-                    label="Institution"
-                    fullWidth
-                    variant="outlined"
-                    value={formData.institution}
-                    onChange={handleInputChange('institution')}
-                    InputProps={{
-                      startAdornment: (
-                        <InputAdornment position="start">
-                          <SchoolIcon sx={{ color: '#0a4f3c' }} />
-                        </InputAdornment>
-                      ),
-                    }}
-                    sx={{
-                      '& .MuiOutlinedInput-root': {
+                  <FormControl fullWidth>
+                    <InputLabel>School</InputLabel>
+                    <Select
+                      value={formData.institution}
+                      label="School"
+                      onChange={(e) => setFormData(prev => ({ ...prev, institution: e.target.value }))}
+                      sx={{
                         borderRadius: 3,
-                        '&.Mui-focused fieldset': {
+                        '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
                           borderColor: '#0a4f3c',
                         },
-                      },
-                      '& .MuiInputLabel-root.Mui-focused': {
-                        color: '#0a4f3c',
-                      },
-                    }}
-                  />
+                      }}
+                    >
+                      <MenuItem value="">Select School</MenuItem>
+                      {schools.map((school) => (
+                        <MenuItem key={school} value={school}>{school}</MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
                 </Grid>
-                
+
                 <Grid item xs={12} md={6}>
                   <TextField
                     label="Department"
@@ -1298,6 +1380,160 @@ const UsersPage: React.FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Create from Excel Dialog */}
+      <Dialog
+        open={excelDialogOpen}
+        onClose={handleCloseExcelDialog}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{ sx: { borderRadius: 4 } }}
+      >
+        <DialogTitle sx={{ pb: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <Avatar sx={{ bgcolor: '#0a4f3c', width: 48, height: 48 }}>
+                <UploadFileIcon />
+              </Avatar>
+              <Box>
+                <Typography variant="h5" sx={{ fontWeight: 700, color: '#0a4f3c' }}>
+                  Create Users from Excel
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Columns required: Title, Full Name, Email, School
+                </Typography>
+              </Box>
+            </Box>
+            <IconButton onClick={handleCloseExcelDialog} sx={{ color: 'text.secondary' }}>
+              <CloseIcon />
+            </IconButton>
+          </Box>
+        </DialogTitle>
+
+        <DialogContent sx={{ px: 3 }}>
+          {!importResult ? (
+            <>
+              {importError && (
+                <Alert severity="error" sx={{ mb: 3, borderRadius: 3 }}>{importError}</Alert>
+              )}
+              <Box
+                sx={{
+                  border: '2px dashed rgba(10,79,60,0.3)',
+                  borderRadius: 3,
+                  p: 4,
+                  textAlign: 'center',
+                  bgcolor: '#f8f9fa'
+                }}
+              >
+                <UploadFileIcon sx={{ fontSize: 48, color: '#0a4f3c', mb: 1 }} />
+                <Typography variant="body1" sx={{ mb: 2 }}>
+                  {excelFile ? excelFile.name : 'Choose a .xlsx file to upload'}
+                </Typography>
+                <Button
+                  variant="outlined"
+                  component="label"
+                  sx={{ borderRadius: 3, borderColor: '#0a4f3c', color: '#0a4f3c' }}
+                >
+                  {excelFile ? 'Choose a Different File' : 'Choose File'}
+                  <input
+                    type="file"
+                    hidden
+                    accept=".xlsx,.xlsm"
+                    onChange={(e) => setExcelFile(e.target.files?.[0] || null)}
+                  />
+                </Button>
+                <Typography variant="caption" display="block" sx={{ mt: 2, color: 'text.secondary' }}>
+                  Each row creates a user with an activation email -- no passwords are ever entered here.
+                  Rows whose email already belongs to an existing user are skipped, not overwritten.
+                </Typography>
+              </Box>
+            </>
+          ) : (
+            <Box>
+              <Alert
+                severity={importResult.created_count > 0 ? 'success' : 'info'}
+                sx={{ mb: 2, borderRadius: 3 }}
+              >
+                Created {importResult.created_count} user{importResult.created_count === 1 ? '' : 's'}
+                {importResult.skipped_count > 0 && `, skipped ${importResult.skipped_count}`}.
+              </Alert>
+
+              {importResult.created.length > 0 && (
+                <>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#0a4f3c', mb: 1 }}>
+                    Created
+                  </Typography>
+                  <List dense sx={{ mb: 2 }}>
+                    {importResult.created.map((row) => (
+                      <ListItem key={row.user_id}>
+                        <ListItemIcon sx={{ minWidth: 36 }}>
+                          <CheckCircleIcon sx={{ color: '#4caf50', fontSize: 20 }} />
+                        </ListItemIcon>
+                        <ListItemText primary={`${row.full_name} (${row.email})`} secondary={`Row ${row.row}`} />
+                      </ListItem>
+                    ))}
+                  </List>
+                </>
+              )}
+
+              {importResult.skipped.length > 0 && (
+                <>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#c77700', mb: 1 }}>
+                    Skipped
+                  </Typography>
+                  <List dense>
+                    {importResult.skipped.map((row, idx) => (
+                      <ListItem key={idx}>
+                        <ListItemIcon sx={{ minWidth: 36 }}>
+                          <ErrorOutlineIcon sx={{ color: '#ff9800', fontSize: 20 }} />
+                        </ListItemIcon>
+                        <ListItemText
+                          primary={row.email || `Row ${row.row}`}
+                          secondary={`Row ${row.row} -- ${row.reason}`}
+                        />
+                      </ListItem>
+                    ))}
+                  </List>
+                </>
+              )}
+            </Box>
+          )}
+        </DialogContent>
+
+        <DialogActions sx={{ p: 3, borderTop: '1px solid rgba(0,0,0,0.08)' }}>
+          <Button onClick={handleCloseExcelDialog} sx={{ borderRadius: 3, px: 3, color: 'text.secondary' }}>
+            {importResult ? 'Close' : 'Cancel'}
+          </Button>
+          {!importResult && (
+            <Button
+              onClick={handleExcelImport}
+              variant="contained"
+              disabled={!excelFile || importing}
+              startIcon={importing ? <CircularProgress size={16} /> : <UploadFileIcon />}
+              sx={{
+                borderRadius: 3,
+                px: 4,
+                background: 'linear-gradient(135deg, #0a4f3c 0%, #2a9d7f 100%)',
+                textTransform: 'none',
+                fontWeight: 600,
+              }}
+            >
+              {importing ? 'Importing...' : 'Import Users'}
+            </Button>
+          )}
+        </DialogActions>
+      </Dialog>
+
+      <Snackbar
+        open={!!successMessage}
+        autoHideDuration={5000}
+        onClose={() => setSuccessMessage('')}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert onClose={() => setSuccessMessage('')} severity="success" sx={{ borderRadius: 3 }}>
+          {successMessage}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

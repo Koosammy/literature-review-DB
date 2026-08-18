@@ -9,6 +9,18 @@ const API_BASE_URL = RAW_API_BASE_URL.replace(/\/$/, '').endsWith('/api')
 // Password Reset Types
 interface PasswordResetResponse {
   message: string;
+  // Present on success: /auth/reset-password also logs the user in
+  // (doubles as the account-activation endpoint).
+  access_token?: string;
+  token_type?: string;
+  user?: User;
+}
+
+export interface BulkImportResult {
+  created_count: number;
+  skipped_count: number;
+  created: Array<{ row: number; email: string; full_name: string; user_id: number }>;
+  skipped: Array<{ row: number; email: string | null; reason: string }>;
 }
 
 interface TokenVerificationResponse {
@@ -200,6 +212,20 @@ class AdminApiService {
 
   async createUser(userData: any): Promise<User> {
     const response = await this.api.post('/users/', userData);
+    return response.data;
+  }
+
+  async bulkImportUsers(file: File): Promise<BulkImportResult> {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await this.apiLongRunning.post('/users/bulk-import', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data;
+  }
+
+  async resendUserInvite(userId: number): Promise<{ message: string }> {
+    const response = await this.api.post(`/users/${userId}/resend-invite`);
     return response.data;
   }
 

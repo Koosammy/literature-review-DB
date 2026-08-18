@@ -7,9 +7,10 @@ import logging
 import time
 import uuid
 
-from .api import projects, sitemap, diagnostics
+from .api import projects, sitemap, diagnostics, supervisors
 from .database import engine
 from .models.base import Base
+from .models.project import Project, ProjectImage
 
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO").upper(),
@@ -17,8 +18,15 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Create tables
-Base.metadata.create_all(bind=engine)
+# Only create the tables this service actually owns. `users` and
+# `project_supervisors` are also mapped here (read-only, to display
+# supervisor info on a project) but are owned/created by the admin-portal
+# backend -- this service's User model only maps a subset of columns, so
+# letting create_all touch that table here could, on a fresh database
+# where this service happened to start first, create it missing NOT NULL
+# columns (email, hashed_password, ...) that admin-portal's create_all
+# would then never retroactively add.
+Base.metadata.create_all(bind=engine, tables=[Project.__table__, ProjectImage.__table__])
 
 app = FastAPI(
     title="Literature Review Public API",
@@ -94,6 +102,7 @@ app.add_middleware(
 app.include_router(projects.router, prefix="/api/projects", tags=["projects"])
 app.include_router(sitemap.router, prefix="/api", tags=["sitemap"])
 app.include_router(diagnostics.router, prefix="/api/diagnostics", tags=["diagnostics"])
+app.include_router(supervisors.router, prefix="/api/supervisors", tags=["supervisors"])
 
 @app.get("/api/health")
 async def health_check():

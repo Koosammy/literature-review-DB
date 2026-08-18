@@ -43,7 +43,19 @@ import datetime
 current_year = datetime.datetime.now().year
 ACADEMIC_YEARS = [f"{year}/{year+1}" for year in range(current_year, current_year-10, -1)]
 
-# UHAS specific institutions/campuses
+# UHAS schools (source: uhas.edu.gh "University Structure" / "Who We Are").
+# Kept as INSTITUTIONS for backward compatibility with existing code/API
+# routes; the UI now labels this "School".
 INSTITUTIONS = [
-    "UHAS - FRED N. BINKA School of Public Health",
+    "UHAS - Fred N. Binka School of Public Health",
+    "UHAS - School of Allied Health Sciences",
+    "UHAS - School of Basic and Biomedical Sciences",
+    "UHAS - School of Medicine",
+    "UHAS - School of Nursing and Midwifery",
+    "UHAS - School of Pharmacy",
+    "UHAS - School of Sports and Exercise Medicine",
+    "UHAS - School of Graduate Studies",
 ]
+
+# Alias so new code can refer to this by its real name.
+SCHOOLS = INSTITUTIONS

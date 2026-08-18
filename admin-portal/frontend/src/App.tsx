@@ -7,6 +7,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
 import LoginPage from './pages/LoginPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
+import ActivateAccountPage from './pages/ActivateAccountPage';
 import DashboardPage from './pages/DashboardPage';
 import UsersPage from './pages/UsersPage';
 import ProjectsPage from './pages/ProjectsPage';
@@ -60,6 +61,7 @@ function App() {
             {/* Public Routes */}
             <Route path="/login" element={<LoginPage />} />
             <Route path="/reset-password" element={<ResetPasswordPage />} />
+            <Route path="/activate-account" element={<ActivateAccountPage />} />
             
             {/* Protected Routes */}
             <Route

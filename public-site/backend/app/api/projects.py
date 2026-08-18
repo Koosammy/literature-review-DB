@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Response
 from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_, func
 from typing import List, Optional
 import io
@@ -23,8 +23,8 @@ async def get_projects(
     degree_type: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
-    query = db.query(Project).filter(Project.is_published == True)
-    
+    query = db.query(Project).options(joinedload(Project.supervisors)).filter(Project.is_published == True)
+
     if search:
         query = query.filter(
             or_(
@@ -46,7 +46,7 @@ async def get_projects(
 
 @router.get("/featured", response_model=List[ProjectResponse])
 async def get_featured_projects(limit: int = 6, db: Session = Depends(get_db)):
-    projects = db.query(Project).filter(
+    projects = db.query(Project).options(joinedload(Project.supervisors)).filter(
         Project.is_published == True
     ).order_by(Project.view_count.desc()).limit(limit).all()
     return projects
@@ -130,7 +130,7 @@ async def get_project_image(
 
 @router.get("/{slug}", response_model=ProjectResponse)
 async def get_project(slug: str, db: Session = Depends(get_db)):
-    project = db.query(Project).filter(
+    project = db.query(Project).options(joinedload(Project.supervisors)).filter(
         Project.slug == slug,
         Project.is_published == True
     ).first()
