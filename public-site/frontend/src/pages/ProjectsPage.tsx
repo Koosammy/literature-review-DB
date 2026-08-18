@@ -47,6 +47,12 @@ import SEOHead from '../components/SEOHead';
 import ProjectCard from '../components/ProjectCard';
 
 // FilterForm Component - Outside of ProjectsPage
+// Deliberately just the text search now -- the Public Health Area, Degree
+// Level, Institution and Academic Year dropdowns (and the separate
+// Search/Clear buttons) were removed per request. `filters.research_area`
+// etc. are left wired up in the parent (searchProjects/handleSearch still
+// read them from the URL) in case that UI comes back later; they just
+// have no control here to set them anymore.
 const FilterForm: React.FC<{
   filters: SearchFilters;
   setFilters: React.Dispatch<React.SetStateAction<SearchFilters>>;
@@ -59,303 +65,68 @@ const FilterForm: React.FC<{
   isMobile: boolean;
   isTablet: boolean;
   isExtraSmall: boolean;
-}> = ({ 
-  filters, 
-  setFilters, 
-  handleSearch, 
-  clearFilters, 
-  researchAreas, 
-  institutions, 
-  degreeTypes, 
-  academicYears,
+}> = ({
+  filters,
+  setFilters,
+  handleSearch,
+  clearFilters,
   isMobile,
-  isTablet,
   isExtraSmall
 }) => {
-  const [expandedSections, setExpandedSections] = useState<{ [key: string]: boolean }>({
-    advanced: !isMobile
-});
-  
-  const toggleSection = (section: string) => {
-    setExpandedSections(prev => ({
-      ...prev,
-      [section]: !prev[section]
-    }));
-  };
-
   return (
     <Box>
-      <Grid container spacing={{ xs: 1, sm: 1.5, md: 2 }}>
-        {/* Search Query */}
-        <Grid item xs={12}>
-          <TextField
-            fullWidth
-            label="Search Research Projects"
-            placeholder={
-              isExtraSmall 
-                ? "Search..." 
-                : isMobile 
-                  ? "Keywords, author..." 
-                  : "Keywords, author, health topics..."
-            }
-            value={filters.query}
-            onChange={(e) => setFilters({ ...filters, query: e.target.value })}
-            onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
-            size={isExtraSmall ? "small" : isMobile ? "medium" : "medium"}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon sx={{ 
-                    color: '#2e7d32',
-                    fontSize: { xs: 18, sm: 20, md: 24 }
-                  }} />
-                </InputAdornment>
-              )
-            }}
-            sx={{
-              '& .MuiOutlinedInput-root': {
-                borderRadius: { xs: 2, sm: 3 },
-                '& fieldset': { 
-                  borderColor: '#c8e6c9', 
-                  borderWidth: { xs: 1, sm: 1.5, md: 2 }
-                },
-                '&:hover fieldset': { borderColor: '#2e7d32' },
-                '&.Mui-focused fieldset': { borderColor: '#1b5e20' }
-              },
-              '& .MuiInputLabel-root': { 
-                color: '#2e7d32',
-                fontSize: { xs: '0.8rem', sm: '0.875rem', md: '1rem' }
-              },
-              '& .MuiInputLabel-root.Mui-focused': { color: '#1b5e20' }
-            }}
-          />
-        </Grid>
-
-        {/* Research Area - Always visible */}
-        <Grid item xs={12}>
-          <FormControl fullWidth size={isExtraSmall ? "small" : isMobile ? "medium" : "medium"}>
-            <InputLabel sx={{ 
-              color: '#2e7d32', 
-              '&.Mui-focused': { color: '#1b5e20' },
-              fontSize: { xs: '0.8rem', sm: '0.875rem', md: '1rem' }
-            }}>
-              Public Health Area
-            </InputLabel>
-            <Select
-              value={filters.research_area}
-              label="Public Health Area"
-              onChange={(e) => setFilters({ ...filters, research_area: e.target.value })}
-              sx={{
-                borderRadius: { xs: 2, sm: 3 },
-                '& .MuiOutlinedInput-notchedOutline': { 
-                  borderColor: '#c8e6c9', 
-                  borderWidth: { xs: 1, sm: 1.5, md: 2 }
-                },
-                '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d32' },
-                '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#1b5e20' }
-              }}
-            >
-              <MenuItem value="">All Health Areas</MenuItem>
-              {researchAreas.map((area) => (
-                <MenuItem key={area} value={area}>{area}</MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-        </Grid>
-
-        {/* Advanced Filters Toggle for Mobile */}
-        {isMobile && (
-          <Grid item xs={12}>
-            <Button
-              fullWidth
-              onClick={() => toggleSection('advanced')}
-              endIcon={expandedSections.advanced ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-              sx={{
-                justifyContent: 'space-between',
-                color: '#2e7d32',
-                textTransform: 'none',
-                fontSize: { xs: '0.8rem', sm: '0.875rem' },
-                py: { xs: 0.75, sm: 1 },
-                borderRadius: 2,
-                border: '1px solid #e8f5e9',
-                '&:hover': {
-                  bgcolor: '#f5f5f5'
-                }
-              }}
-            >
-              {isExtraSmall ? 'More Filters' : 'Advanced Filters'}
-            </Button>
-          </Grid>
-        )}
-
-        {/* Advanced Filters */}
-        <Grid item xs={12}>
-          <Collapse in={expandedSections.advanced || !isMobile}>
-            <Grid container spacing={{ xs: 1, sm: 1.5, md: 2 }}>
-              {/* Degree Type */}
-              <Grid item xs={12} sm={6} md={4}>
-                <FormControl fullWidth size={isExtraSmall ? "small" : isMobile ? "medium" : "medium"}>
-                  <InputLabel sx={{ 
-                    color: '#2e7d32', 
-                    '&.Mui-focused': { color: '#1b5e20' },
-                    fontSize: { xs: '0.8rem', sm: '0.875rem', md: '1rem' }
-                  }}>
-                    Degree Level
-                  </InputLabel>
-                  <Select
-                    value={filters.degree_type}
-                    label="Degree Level"
-                    onChange={(e) => setFilters({ ...filters, degree_type: e.target.value })}
-                    sx={{
-                      borderRadius: { xs: 2, sm: 3 },
-                      '& .MuiOutlinedInput-notchedOutline': { 
-                        borderColor: '#c8e6c9', 
-                        borderWidth: { xs: 1, sm: 1.5, md: 2 }
-                      },
-                      '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d32' },
-                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#1b5e20' }
-                    }}
-                  >
-                    <MenuItem value="">All Levels</MenuItem>
-                    {degreeTypes.map((type) => (
-                      <MenuItem key={type} value={type}>{type}</MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-
-              {/* Institution */}
-              <Grid item xs={12} sm={6} md={4}>
-                <FormControl fullWidth size={isExtraSmall ? "small" : isMobile ? "medium" : "medium"}>
-                  <InputLabel sx={{ 
-                    color: '#2e7d32', 
-                    '&.Mui-focused': { color: '#1b5e20' },
-                    fontSize: { xs: '0.8rem', sm: '0.875rem', md: '1rem' }
-                  }}>
-                    Institution
-                  </InputLabel>
-                  <Select
-                    value={filters.institution}
-                    label="Institution"
-                    onChange={(e) => setFilters({ ...filters, institution: e.target.value })}
-                    sx={{
-                      borderRadius: { xs: 2, sm: 3 },
-                      '& .MuiOutlinedInput-notchedOutline': { 
-                        borderColor: '#c8e6c9', 
-                        borderWidth: { xs: 1, sm: 1.5, md: 2 }
-                      },
-                      '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d32' },
-                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#1b5e20' }
-                    }}
-                  >
-                    <MenuItem value="">All Institutions</MenuItem>
-                    {institutions.map((institution) => (
-                      <MenuItem key={institution} value={institution}>{institution}</MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-
-              {/* Academic Year */}
-              <Grid item xs={12} sm={6} md={4}>
-                <FormControl fullWidth size={isExtraSmall ? "small" : isMobile ? "medium" : "medium"}>
-                  <InputLabel sx={{ 
-                    color: '#2e7d32', 
-                    '&.Mui-focused': { color: '#1b5e20' },
-                    fontSize: { xs: '0.8rem', sm: '0.875rem', md: '1rem' }
-                  }}>
-                    Academic Year
-                  </InputLabel>
-                  <Select
-                    value={filters.academic_year}
-                    label="Academic Year"
-                    onChange={(e) => setFilters({ ...filters, academic_year: e.target.value })}
-                    sx={{
-                      borderRadius: { xs: 2, sm: 3 },
-                      '& .MuiOutlinedInput-notchedOutline': { 
-                        borderColor: '#c8e6c9', 
-                        borderWidth: { xs: 1, sm: 1.5, md: 2 }
-                      },
-                      '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#2e7d32' },
-                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#1b5e20' }
-                    }}
-                  >
-                    <MenuItem value="">All Years</MenuItem>
-                    {academicYears.map((year) => (
-                      <MenuItem key={year} value={year}>{year}</MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-            </Grid>
-          </Collapse>
-        </Grid>
-
-        {/* Action Buttons */}
-        <Grid item xs={12}>
-          <Box sx={{ 
-            display: 'flex', 
-            gap: { xs: 1, sm: 1.5, md: 2 }, 
-            flexDirection: isMobile ? 'column' : 'row' 
-          }}>
-            <Button
-              variant="contained"
-              onClick={handleSearch}
-              startIcon={<SearchIcon />}
-              size={isExtraSmall ? "medium" : isMobile ? "large" : "large"}
-              fullWidth={isMobile}
-              sx={{
-                bgcolor: '#1b5e20',
-                color: 'white',
-                px: { xs: 2, sm: 3, md: 4 },
-                py: { xs: 1, sm: 1.25, md: 1.5 },
-                borderRadius: { xs: 2, sm: 3 },
-                textTransform: 'none',
-                fontSize: { xs: '0.875rem', sm: '1rem', md: '1.1rem' },
-                fontWeight: 'bold',
-                boxShadow: '0 4px 12px rgba(27, 94, 32, 0.3)',
-                '&:hover': {
-                  bgcolor: '#0d4715',
-                  transform: 'translateY(-1px)',
-                  boxShadow: '0 6px 20px rgba(27, 94, 32, 0.4)'
-                },
-                '&:active': {
-                  transform: 'scale(0.98)'
-                }
-              }}
-            >
-              Search
-            </Button>
-            <Button
-              variant="outlined"
-              onClick={clearFilters}
-              size={isExtraSmall ? "medium" : isMobile ? "large" : "large"}
-              fullWidth={isMobile}
-              sx={{
-                borderColor: '#2e7d32',
-                color: '#2e7d32',
-                px: { xs: 2, sm: 3, md: 4 },
-                py: { xs: 1, sm: 1.25, md: 1.5 },
-                borderRadius: { xs: 2, sm: 3 },
-                textTransform: 'none',
-                fontSize: { xs: '0.875rem', sm: '1rem', md: '1.1rem' },
-                fontWeight: 'bold',
-                borderWidth: { xs: 1, sm: 1.5, md: 2 },
-                '&:hover': {
-                  borderColor: '#1b5e20',
-                  bgcolor: '#e8f5e9',
-                  borderWidth: { xs: 1, sm: 1.5, md: 2 }
-                },
-                '&:active': {
-                  transform: 'scale(0.98)'
-                }
-              }}
-            >
-              {isExtraSmall ? 'Clear' : 'Clear Filters'}
-            </Button>
-          </Box>
-        </Grid>
-      </Grid>
+      <TextField
+        fullWidth
+        label="Search Research Projects"
+        placeholder={
+          isExtraSmall
+            ? "Search..."
+            : isMobile
+              ? "Keywords, author..."
+              : "Keywords, author, health topics..."
+        }
+        value={filters.query}
+        onChange={(e) => setFilters({ ...filters, query: e.target.value })}
+        onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+        size={isExtraSmall ? "small" : "medium"}
+        InputProps={{
+          startAdornment: (
+            <InputAdornment position="start">
+              <IconButton
+                onClick={handleSearch}
+                size="small"
+                aria-label="Search"
+                sx={{ color: '#2e7d32' }}
+              >
+                <SearchIcon sx={{ fontSize: { xs: 18, sm: 20, md: 24 } }} />
+              </IconButton>
+            </InputAdornment>
+          ),
+          endAdornment: filters.query ? (
+            <InputAdornment position="end">
+              <IconButton onClick={clearFilters} size="small" aria-label="Clear search">
+                <CloseIcon sx={{ fontSize: 18 }} />
+              </IconButton>
+            </InputAdornment>
+          ) : undefined
+        }}
+        sx={{
+          '& .MuiOutlinedInput-root': {
+            borderRadius: { xs: 2, sm: 3 },
+            '& fieldset': {
+              borderColor: '#c8e6c9',
+              borderWidth: { xs: 1, sm: 1.5, md: 2 }
+            },
+            '&:hover fieldset': { borderColor: '#2e7d32' },
+            '&.Mui-focused fieldset': { borderColor: '#1b5e20' }
+          },
+          '& .MuiInputLabel-root': {
+            color: '#2e7d32',
+            fontSize: { xs: '0.8rem', sm: '0.875rem', md: '1rem' }
+          },
+          '& .MuiInputLabel-root.Mui-focused': { color: '#1b5e20' }
+        }}
+      />
     </Box>
   );
 };
