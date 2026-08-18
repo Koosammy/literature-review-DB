@@ -212,6 +212,95 @@ async def send_reset_password_email(email: EmailStr, token: str, username: str):
     await send_password_reset_email(email, username, reset_url)
 
 
+async def send_welcome_email(
+    email: EmailStr,
+    full_name: str,
+    activation_url: str,
+    is_resend: bool = False,
+) -> bool:
+    """Send the account-activation email for admin-created / bulk-imported
+    users -- no password is ever emailed; the link lets them set their own
+    and (on the activation page) upload the profile photo shown alongside
+    their supervised work on the public site."""
+
+    logger.info("=" * 50)
+    logger.info(f"{'Resend welcome' if is_resend else 'Welcome'} email")
+    logger.info(f"  To: {email}")
+    logger.info(f"  Activation URL: {activation_url}")
+    logger.info("=" * 50)
+
+    heading = "You're invited back to finish setting up" if is_resend else "Welcome to UHAS Research Hub"
+
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    </head>
+    <body style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
+        <div style="background: linear-gradient(135deg, #0a4f3c 0%, #2a9d7f 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
+            <h1 style="margin: 0; font-size: 24px;">👋 {heading}</h1>
+            <p style="margin: 10px 0 0 0; opacity: 0.9;">UHAS Research Hub Admin Portal</p>
+        </div>
+
+        <div style="background: white; padding: 30px; border-radius: 0 0 10px 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+            <p style="font-size: 16px; color: #333;">Hello <strong>{full_name}</strong>,</p>
+
+            <p style="font-size: 16px; color: #555; line-height: 1.6;">
+                An account has been created for you on the UHAS Research Hub Admin Portal.
+                Click the button below to set your password and finish setting up your account.
+            </p>
+
+            <div style="text-align: center; margin: 30px 0;">
+                <a href="{activation_url}"
+                   style="display: inline-block; padding: 15px 40px; background: linear-gradient(135deg, #0a4f3c 0%, #2a9d7f 100%); color: white; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px; box-shadow: 0 4px 15px rgba(10,79,60,0.3);">
+                    Set Up My Account
+                </a>
+            </div>
+
+            <div style="background: #fff3cd; border: 1px solid #ffeeba; color: #856404; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                <strong>⏰ This link expires in 7 days</strong>
+                <p style="margin: 5px 0 0 0; font-size: 14px;">You'll be asked to choose a password and upload a profile photo before you can sign in.</p>
+            </div>
+
+            <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                <p style="margin: 0; font-size: 14px; color: #666;">
+                    <strong>Can't click the button?</strong> Copy and paste this link into your browser:
+                </p>
+                <p style="margin: 10px 0 0 0; word-break: break-all; font-size: 12px; color: #0a4f3c; background: #e9ecef; padding: 10px; border-radius: 4px;">
+                    {activation_url}
+                </p>
+            </div>
+
+            <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+
+            <p style="font-size: 13px; color: #888; text-align: center;">
+                If you weren't expecting this, you can ignore this email.
+            </p>
+        </div>
+
+        <div style="text-align: center; padding: 20px; color: #888; font-size: 12px;">
+            <p>© 2024 UHAS Research Hub. All rights reserved.</p>
+        </div>
+    </body>
+    </html>
+    """
+
+    success = await send_email_brevo(
+        to_email=email,
+        to_name=full_name,
+        subject=("Finish setting up your account" if is_resend else "Welcome to UHAS Research Hub") + " - UHAS Research Hub",
+        html_content=html
+    )
+
+    if not success:
+        logger.error(f"Failed to send welcome email to {email}")
+        logger.info(f"📋 MANUAL ACTIVATION LINK: {activation_url}")
+
+    return success
+
+
 async def test_email_connection() -> dict:
     """Test Brevo API connection"""
     

@@ -3,9 +3,13 @@ from typing import Optional, List, ForwardRef
 from datetime import datetime
 
 class UserBase(BaseModel):
-    username: str
+    # Not settable on creation -- the backend derives it from the email
+    # address (see users.py::_generate_username). Present here only so
+    # UserResponse (which extends this) can return it.
+    username: Optional[str] = None
     email: EmailStr
     full_name: str
+    title: Optional[str] = None
     institution: Optional[str] = None
     department: Optional[str] = None
     phone: Optional[str] = None
@@ -13,15 +17,17 @@ class UserBase(BaseModel):
     disciplines: Optional[str] = None
     role: str = "faculty"
     profile_image: Optional[str] = None
-    
+
     @validator('username')
     def username_must_be_valid(cls, v):
+        if v is None:
+            return v
         if len(v) < 3:
             raise ValueError('Username must be at least 3 characters long')
         if not v.replace('_', '').replace('-', '').isalnum():
             raise ValueError('Username can only contain letters, numbers, hyphens, and underscores')
         return v
-    
+
     @validator('role')
     def role_must_be_valid(cls, v):
         if v not in ['faculty', 'main_coordinator']:
@@ -41,17 +47,14 @@ class UserBase(BaseModel):
         return v
 
 class UserCreate(UserBase):
-    password: str
-    
-    @validator('password')
-    def password_must_be_strong(cls, v):
-        if len(v) < 6:
-            raise ValueError('Password must be at least 6 characters long')
-        return v
+    """No password field: the backend generates one and emails the user an
+    activation link (see /api/users/ POST) instead of an admin choosing it."""
+    pass
 
 class UserUpdate(BaseModel):
     full_name: Optional[str] = None
     email: Optional[EmailStr] = None
+    title: Optional[str] = None
     institution: Optional[str] = None
     department: Optional[str] = None
     phone: Optional[str] = None
@@ -82,6 +85,7 @@ class UserUpdate(BaseModel):
 class UserResponse(UserBase):
     id: int
     is_active: bool
+    must_set_password: bool = False
     created_at: datetime
     project_count: Optional[int] = 0  # Number of projects created by user
     

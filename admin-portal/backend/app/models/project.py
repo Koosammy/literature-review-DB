@@ -1,24 +1,43 @@
-from sqlalchemy import Column, String, Text, Boolean, Integer, DateTime, func, ForeignKey, LargeBinary
+from sqlalchemy import Column, String, Text, Boolean, Integer, DateTime, func, ForeignKey, LargeBinary, Table
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import JSON
-from .base import BaseModel
+from .base import BaseModel, Base
+
+# Many-to-many: a project can have several supervisors, and a supervisor
+# (a User) can supervise several projects.
+project_supervisors = Table(
+    "project_supervisors",
+    Base.metadata,
+    Column("project_id", Integer, ForeignKey("projects.id", ondelete="CASCADE"), primary_key=True),
+    Column("user_id", Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True),
+)
+
 
 class Project(BaseModel):
     __tablename__ = "projects"
-    
+
     # Basic Info
     title = Column(String, nullable=False, index=True)
     slug = Column(String, unique=True, index=True, nullable=False)
     abstract = Column(Text)
     keywords = Column(Text)
-    
+
     # Academic Details
     research_area = Column(String, index=True)
     degree_type = Column(String)
     academic_year = Column(String)
     institution = Column(String, index=True)
     department = Column(String)
+    # Legacy free-text supervisor field. Kept as a display fallback for
+    # projects created before supervisors were linked User accounts (see
+    # `supervisors` below) -- projects created/edited going forward use the
+    # relationship instead.
     supervisor = Column(String)
+    supervisors = relationship(
+        "User",
+        secondary=project_supervisors,
+        back_populates="supervised_projects",
+    )
     
     # Author Info
     author_name = Column(String, nullable=False)

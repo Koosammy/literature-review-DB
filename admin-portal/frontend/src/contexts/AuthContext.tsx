@@ -7,6 +7,7 @@ interface AuthContextType {
   login: (username: string, password: string) => Promise<void>;
   logout: () => void;
   updateUser: (userData: Partial<User>) => void;
+  setSession: (token: string, userData: User) => void;
   loading: boolean;
   isAuthenticated: boolean;
 }
@@ -85,6 +86,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
+  // Used by the account-activation flow: /auth/reset-password returns a
+  // fresh access token + user straight away (no separate /auth/login call
+  // needed) once the user has set their password.
+  const setSession = (token: string, userData: User) => {
+    localStorage.setItem('admin_token', token);
+    localStorage.setItem('admin_user', JSON.stringify(userData));
+    setUser(userData);
+  };
+
   const logout = () => {
     // Don't wait for logout API call to complete
     adminApi.logout().catch(console.error);
@@ -117,6 +127,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     login,
     logout,
     updateUser,
+    setSession,
     loading,
     isAuthenticated: !!user,
   };

@@ -11,6 +11,34 @@ export interface ProjectImage {
   created_at: string;
 }
 
+export interface SupervisorBrief {
+  id: number;
+  title?: string;
+  full_name: string;
+  institution?: string;
+  profile_image?: string;
+}
+
+export interface SupervisorWork {
+  id: number;
+  title: string;
+  slug: string;
+  degree_type?: string;
+  academic_year?: string;
+  publication_date?: string;
+}
+
+export interface SupervisorProfile {
+  id: number;
+  title?: string;
+  full_name: string;
+  institution?: string;
+  about?: string;
+  profile_image?: string;
+  works_count: number;
+  works: SupervisorWork[];
+}
+
 export interface Project {
   id: number;
   title: string;
@@ -23,6 +51,7 @@ export interface Project {
   institution?: string;
   department?: string;
   supervisor?: string;
+  supervisors?: SupervisorBrief[];
   author_name: string;
   author_email?: string;
   meta_description?: string;

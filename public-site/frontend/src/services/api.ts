@@ -1,13 +1,14 @@
 import axios from 'axios';
 import { cleanBaseUrl } from '../config/api';
 // Import ALL types from the central types file
-import { 
-  Project, 
-  ProjectSummary, 
-  SiteStats, 
+import {
+  Project,
+  ProjectSummary,
+  SiteStats,
   ProjectImage,
   SearchFilters,
   SearchResponse,
+  SupervisorProfile,
   getProjectImageUrl,
   getFeaturedImageUrl
 } from '../types';
@@ -245,6 +246,11 @@ class ApiService {
       console.error('Failed to get file info:', error);
       return { available: false };
     }
+  }
+
+  async getSupervisorProfile(supervisorId: number): Promise<SupervisorProfile> {
+    const response = await this.api.get(`/api/supervisors/${supervisorId}`);
+    return response.data;
   }
 }
 

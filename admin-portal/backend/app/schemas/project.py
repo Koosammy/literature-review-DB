@@ -8,6 +8,18 @@ class ProjectImageBase(BaseModel):
     order_index: int = 0
     is_featured: bool = False
 
+class SupervisorBrief(BaseModel):
+    """Lightweight User projection used for the supervisor picker and for
+    embedding in a project's response -- deliberately excludes anything
+    account-related (email, role, etc)."""
+    id: int
+    title: Optional[str] = None
+    full_name: str
+    institution: Optional[str] = None
+    profile_image: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
 class ProjectImageResponse(ProjectImageBase):
     id: int
     project_id: int
@@ -39,7 +51,10 @@ class ProjectBase(BaseModel):
     is_published: bool = True
 
 class ProjectCreate(ProjectBase):
-    pass
+    # IDs of User accounts to link as supervisors. When present (even an
+    # empty list) this takes over from the legacy free-text `supervisor`
+    # field for display purposes.
+    supervisor_user_ids: Optional[List[int]] = None
 
 class ProjectUpdate(BaseModel):
     title: Optional[str] = None
@@ -51,6 +66,7 @@ class ProjectUpdate(BaseModel):
     institution: Optional[str] = None
     department: Optional[str] = None
     supervisor: Optional[str] = None
+    supervisor_user_ids: Optional[List[int]] = None
     author_name: Optional[str] = None
     author_email: Optional[str] = None
     meta_description: Optional[str] = None
@@ -71,6 +87,10 @@ class ProjectResponse(ProjectBase):
     
     # New image records with default
     image_records: List[ProjectImageResponse] = Field(default_factory=list)
+
+    # Linked supervisor accounts (empty for legacy projects that only have
+    # the free-text `supervisor` field above).
+    supervisors: List[SupervisorBrief] = Field(default_factory=list)
     
     # Database Storage Fields - all optional
     document_filename: Optional[str] = None
