@@ -8,8 +8,7 @@ import {
   CardContent,
   Chip,
   Stack,
-  Typography,
-  alpha
+  Typography
 } from '@mui/material';
 import {
   ArrowForward as ArrowIcon,
@@ -19,7 +18,7 @@ import {
   School as SchoolIcon,
   Visibility as ViewIcon
 } from '@mui/icons-material';
-import { ProjectSummary, getFeaturedImageUrl } from '../types';
+import { ProjectSummary } from '../types';
 
 interface ProjectCardProps {
   project: ProjectSummary;
@@ -38,9 +37,7 @@ const CARD_GRADIENTS = [
 const logoUrl = `${process.env.PUBLIC_URL || ''}/images/school-logo.jpeg`;
 
 const ProjectCard: React.FC<ProjectCardProps> = ({ project, index = 0, onClick, compact = false }) => {
-  const featuredImage = getFeaturedImageUrl(project);
   const gradient = CARD_GRADIENTS[index % CARD_GRADIENTS.length];
-  const hasAbstract = Boolean(project.abstract?.trim());
 
   return (
     <Card
@@ -62,7 +59,6 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, index = 0, onClick, 
           transform: { xs: 'none', md: 'translateY(-8px)' },
           borderColor: 'rgba(42, 157, 143, 0.45)',
           boxShadow: '0 26px 60px rgba(15, 63, 58, 0.18)',
-          '& .project-card-media': { transform: { xs: 'none', md: 'scale(1.04)' } },
           '& .project-card-cta': { transform: 'translateX(3px)' }
         },
         '&:active': {
@@ -72,45 +68,28 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, index = 0, onClick, 
     >
       <Box
         sx={{
-          height: compact ? { xs: 128, sm: 148, md: 168 } : { xs: 150, sm: 172, md: 192 },
+          height: compact ? { xs: 84, sm: 92, md: 100 } : { xs: 92, sm: 100, md: 112 },
           position: 'relative',
-          overflow: 'hidden',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
           background: `linear-gradient(135deg, ${gradient[0]} 0%, ${gradient[1]} 100%)`
         }}
       >
-        {featuredImage && (
-          <Box
-            component="img"
-            className="project-card-media"
-            src={featuredImage}
-            alt="Project visual"
-            sx={{
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
-              opacity: 0.5,
-              transition: 'transform 400ms ease'
-            }}
-          />
-        )}
-        <Box sx={{ position: 'absolute', inset: 0, background: `linear-gradient(140deg, ${alpha(gradient[0], 0.95)} 0%, ${alpha(gradient[1], 0.72)} 55%, rgba(255,255,255,0.05) 100%)` }} />
-        <Box sx={{ position: 'absolute', width: 180, height: 180, borderRadius: '50%', right: -58, top: -72, border: '28px solid rgba(255,255,255,0.10)' }} />
-        <Box sx={{ position: 'absolute', width: 120, height: 120, borderRadius: '50%', left: -46, bottom: -50, bgcolor: 'rgba(255,255,255,0.10)', filter: 'blur(2px)' }} />
-
         <Chip
           label={project.research_area || 'Research'}
           size="small"
           sx={{
             position: 'absolute',
-            top: { xs: 12, md: 16 },
-            right: { xs: 12, md: 16 },
-            maxWidth: '70%',
+            top: { xs: 10, md: 12 },
+            right: { xs: 10, md: 12 },
+            maxWidth: '55%',
             bgcolor: 'rgba(255,255,255,0.92)',
             color: gradient[0],
             fontWeight: 800,
             letterSpacing: 0.2,
             boxShadow: '0 10px 24px rgba(0,0,0,0.16)',
-            '& .MuiChip-label': { px: 1.4, overflow: 'hidden', textOverflow: 'ellipsis' }
+            '& .MuiChip-label': { px: 1.2, overflow: 'hidden', textOverflow: 'ellipsis' }
           }}
         />
 
@@ -118,22 +97,19 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, index = 0, onClick, 
           src={logoUrl}
           variant="rounded"
           sx={{
-            position: 'absolute',
-            left: { xs: 18, md: 24 },
-            bottom: { xs: -28, md: -32 },
-            width: { xs: 58, md: 68 },
-            height: { xs: 58, md: 68 },
+            width: { xs: 52, md: 60 },
+            height: { xs: 52, md: 60 },
             bgcolor: 'white',
             p: 0.7,
-            border: '4px solid #fff',
-            boxShadow: '0 14px 32px rgba(6, 78, 59, 0.24)'
+            border: '3px solid rgba(255,255,255,0.6)',
+            boxShadow: '0 10px 24px rgba(6, 78, 59, 0.24)'
           }}
         >
           <HealthIcon />
         </Avatar>
       </Box>
 
-      <CardContent sx={{ flexGrow: 1, pt: { xs: 4.5, md: 5 }, px: { xs: 2.2, md: 3 }, pb: 2 }}>
+      <CardContent sx={{ flexGrow: 1, pt: { xs: 2, md: 2.5 }, px: { xs: 2.2, md: 3 }, pb: 2 }}>
         <Typography
           variant="h6"
           component="h3"
@@ -153,44 +129,6 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, index = 0, onClick, 
           {project.title}
         </Typography>
 
-        {hasAbstract && (
-          <Box sx={{ mb: 2 }}>
-            <Typography
-              variant="overline"
-              component="p"
-              sx={{
-                color: 'text.secondary',
-                display: 'block',
-                fontWeight: 800,
-                letterSpacing: 0.8,
-                lineHeight: 1,
-                mb: 0.75
-              }}
-            >
-              Abstract
-            </Typography>
-            <Box
-              sx={{
-                color: 'text.secondary',
-                fontFamily: 'inherit',
-                fontSize: (theme) => theme.typography.pxToRem(12),
-                lineHeight: 1.7,
-                display: '-webkit-box',
-                WebkitLineClamp: compact ? 2 : 3,
-                WebkitBoxOrient: 'vertical',
-                overflow: 'hidden',
-                '& p': { m: 0 },
-                '& *': {
-                  color: 'inherit !important',
-                  fontFamily: 'inherit !important',
-                  fontSize: 'inherit !important',
-                  lineHeight: 'inherit !important'
-                }
-              }}
-              dangerouslySetInnerHTML={{ __html: project.abstract || '' }}
-            />
-          </Box>
-        )}
 
         <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: 'wrap', rowGap: 1 }}>
           {project.degree_type && <Chip label={project.degree_type} size="small" icon={<SchoolIcon />} sx={{ bgcolor: '#ecfdf5', color: '#047857', fontWeight: 800, border: '1px solid #bbf7d0' }} />}
