@@ -33,6 +33,160 @@ from .utils import sha256_bytes
 logger = logging.getLogger(__name__)
 
 
+def _docx_tc_text(tc) -> str:
+    """A table cell's own text (its paragraphs joined with "\\n"), scoped to
+    just this ``<w:tc>`` -- unlike python-docx's ``row.cells[i].text``, this
+    does NOT inherit a vertically-merged parent cell's text, which is what
+    lets the header-merge detection below tell "this cell has nothing of
+    its own to add" apart from "this cell is empty"."""
+    from docx.oxml.ns import qn
+
+    lines = []
+    for p in tc.findall(qn("w:p")):
+        lines.append("".join(t.text or "" for t in p.iter(qn("w:t"))))
+    return "\n".join(lines).strip()
+
+
+_NO_FILL = {None, "auto", "FFFFFF"}
+
+
+def _is_light_hex(hex_color: str) -> bool:
+    try:
+        r, g, b = (int(hex_color[i : i + 2], 16) for i in (0, 2, 4))
+    except (ValueError, IndexError):
+        return True
+    # Standard relative-luminance approximation for text contrast.
+    return (0.299 * r + 0.587 * g + 0.114 * b) > 150
+
+
+def _docx_table_grid(table) -> List[List[Optional[tuple]]]:
+    """Expand a table into a full row x column grid of (own_text, span,
+    vmerge, fill) tuples, duplicating a horizontally-merged (gridSpan)
+    cell's own text into each column it spans. ``vmerge`` is ``"continue"``
+    for a cell that's the tail of a vertical merge (Word leaves these with
+    no text of their own -- the real content lives on the "restart" cell
+    above). ``fill`` is the cell's background color (a "RRGGBB" hex string)
+    when Word records one, else ``None`` -- some tables (e.g. a Gantt-style
+    schedule) mark their data with cell shading and no text at all, so this
+    is the only way to recover that content."""
+    from docx.oxml.ns import qn
+
+    n_cols = len(table.columns)
+    grid_rows = []
+    for row in table.rows:
+        grid = [None] * n_cols
+        col = 0
+        for tc in row._tr.findall(qn("w:tc")):
+            text = _docx_tc_text(tc)
+            span = 1
+            vmerge = None
+            fill = None
+            tcPr = tc.find(qn("w:tcPr"))
+            if tcPr is not None:
+                gs = tcPr.find(qn("w:gridSpan"))
+                if gs is not None:
+                    span = int(gs.get(qn("w:val")) or 1)
+                vm = tcPr.find(qn("w:vMerge"))
+                if vm is not None:
+                    vmerge = vm.get(qn("w:val")) or "continue"
+                shd = tcPr.find(qn("w:shd"))
+                if shd is not None:
+                    raw_fill = shd.get(qn("w:fill"))
+                    if raw_fill and raw_fill.upper() not in _NO_FILL:
+                        fill = raw_fill.upper()
+            for k in range(span):
+                if col + k < n_cols:
+                    grid[col + k] = (text, span, vmerge, fill)
+            col += span
+        grid_rows.append(grid)
+    return grid_rows
+
+
+def _docx_table_header_and_body(table) -> tuple:
+    """Read a python-docx Table into (header, body_rows), correctly merging
+    a header that spans more than one physical table row.
+
+    A merged parent header cell (e.g. one "Delivery" cell horizontally
+    spanning two columns via Word's gridSpan) is ambiguous on its own: both
+    spanned columns show the same label. Real documents resolve that
+    ambiguity with a second header row giving each spanned column its own
+    sub-label (e.g. "Skilled" / "Unskilled") -- and leave every already-
+    unambiguous column blank on that row, whether or not Word recorded an
+    explicit vMerge for it (it often doesn't; a plain blank cell is just as
+    common as an explicit vertical merge). So the rule used here is
+    structural, not markup-dependent: a row extends the header for as long
+    as every already-unambiguous column stays blank on it while at least
+    one still-ambiguous (gridSpan > 1) column gets its own text -- the
+    moment a resolved column has its own content, that row is real data.
+    """
+    grid_rows = _docx_table_grid(table)
+    if not grid_rows:
+        return [], [], []
+
+    n_cols = len(grid_rows[0])
+    header_parts = [[grid_rows[0][c][0] if grid_rows[0][c] else ""] for c in range(n_cols)]
+    resolved = [not grid_rows[0][c] or grid_rows[0][c][1] == 1 for c in range(n_cols)]
+
+    header_end = 1
+    r = 1
+    while r < len(grid_rows) and not all(resolved):
+        row = grid_rows[r]
+        ok = True
+        any_new = False
+        for c in range(n_cols):
+            text = row[c][0] if row[c] else ""
+            if resolved[c]:
+                if text:
+                    ok = False
+                    break
+            elif text:
+                any_new = True
+        if not ok or not any_new:
+            break
+        for c in range(n_cols):
+            if not resolved[c]:
+                text = row[c][0] if row[c] else ""
+                if text:
+                    header_parts[c].append(text)
+                    resolved[c] = True
+        header_end = r + 1
+        r += 1
+
+    header = ["\n".join(part for part in parts if part) for parts in header_parts]
+
+    # A vertically-merged data cell (e.g. one category label spanning
+    # several rows) has empty text of its own on every row but the first;
+    # inherit from directly above only for those, not for cells that are
+    # just blank on their own merits (most blanks in these tables mean
+    # "not applicable", not "same as above").
+    body_rows = []
+    body_fills: List[List[Optional[str]]] = []
+    last_seen = [""] * n_cols
+    for r in range(header_end, len(grid_rows)):
+        row_vals = []
+        row_fills = []
+        for c in range(n_cols):
+            cell = grid_rows[r][c]
+            text = cell[0] if cell else ""
+            vmerge = cell[2] if cell else None
+            fill = cell[3] if cell else None
+            if not text and vmerge == "continue":
+                text = last_seen[c]
+            last_seen[c] = text
+            # A cell marked only by background shading (no text at all --
+            # e.g. a schedule's "active this month" marker) still needs
+            # *some* content, or it reads as missing data and the table as
+            # a whole can look empty enough to be mistaken for noise.
+            if not text and fill:
+                text = "●"
+            row_vals.append(text)
+            row_fills.append(fill)
+        body_rows.append(row_vals)
+        body_fills.append(row_fills)
+
+    return header, body_rows, body_fills
+
+
 class DocxExtractor:
     def __init__(
         self,
@@ -188,7 +342,7 @@ class DocxExtractor:
 
         from docx import Document
 
-        from .utils import dedupe_column_names, looks_like_header_row, normalize_rows, rows_look_like_table
+        from .utils import dedupe_column_names, normalize_rows, rows_look_like_table
 
         tables: List[ExtractedTable] = []
         try:
@@ -198,22 +352,17 @@ class DocxExtractor:
             return tables
 
         for idx, table in enumerate(doc.tables):
-            # `row.cells` already resolves gridSpan/vMerge (a merged header
-            # cell spanning several columns, e.g. "Delivery" over
-            # "Skilled"/"Unskilled" sub-columns, correctly repeats its text
-            # into each spanned column) -- no raw XML walking needed here.
-            rows = [[cell.text.strip() for cell in row.cells] for row in table.rows]
-            rows = normalize_rows(rows)
+            header, body, fills = _docx_table_header_and_body(table)
+            if not header:
+                continue
+            rows = normalize_rows([header] + body)
             if not rows_look_like_table(rows):
                 continue
+            header, body = rows[0], rows[1:]
 
-            header, *body = rows
-            if looks_like_header_row(header, body):
-                df = pd.DataFrame(body, columns=dedupe_column_names(header))
-            else:
-                df = pd.DataFrame(rows, columns=[f"Column {i + 1}" for i in range(len(rows[0]))])
+            df = pd.DataFrame(body, columns=dedupe_column_names(header))
 
-            image_bytes = self._render_table_image(df, f"Table {idx + 1}")
+            image_bytes = self._render_table_image(df, f"Table {idx + 1}", cell_fills=fills)
             tables.append(
                 ExtractedTable(
                     page_number=0,
@@ -227,7 +376,12 @@ class DocxExtractor:
 
         return tables
 
-    def _render_table_image(self, df: pd.DataFrame, title: str) -> bytes:
+    def _render_table_image(
+        self,
+        df: pd.DataFrame,
+        title: str,
+        cell_fills: Optional[List[List[Optional[str]]]] = None,
+    ) -> bytes:
         """Draw the table with real text measurement so columns/rows autofit
         to their content and text never overlaps.
 
@@ -236,6 +390,12 @@ class DocxExtractor:
         this draws directly with Pillow instead, using the TrueType fonts
         matplotlib already bundles (no new dependency) for exact pixel
         measurement of each line before laying out the grid.
+
+        ``cell_fills`` optionally gives each body cell's own background
+        color ("RRGGBB", row-major matching ``df``) -- used for tables
+        (e.g. a Gantt-style schedule) whose real content is Word cell
+        shading rather than text, so the rendered image stays faithful to
+        the source instead of showing a blank grid.
         """
         import io as _io
 
@@ -331,12 +491,15 @@ class DocxExtractor:
 
         for r_idx, cell_lines in enumerate(body_lines):
             rh = row_heights[r_idx]
-            draw.rectangle([0, y, table_w, y + rh], fill="#f2f2f2" if r_idx % 2 else "white")
             x = 0
             for c in range(n_cols):
+                fill = cell_fills[r_idx][c] if cell_fills else None
+                cell_bg = f"#{fill}" if fill else ("#f2f2f2" if r_idx % 2 else "white")
+                text_color = "white" if fill and not _is_light_hex(fill) else "#222222"
+                draw.rectangle([x, y, x + col_widths[c], y + rh], fill=cell_bg)
                 cy = y + pad_y
                 for line in cell_lines[c]:
-                    draw.text((x + pad_x, cy), line, font=regular_font, fill="#222222")
+                    draw.text((x + pad_x, cy), line, font=regular_font, fill=text_color)
                     cy += reg_line_h
                 x += col_widths[c]
             y += rh
