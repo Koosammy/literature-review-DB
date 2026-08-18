@@ -91,3 +91,41 @@ def normalize_rows(rows: List[List[Optional[str]]]) -> List[List[str]]:
         row += [""] * (ncols - len(row))
         out.append(row)
     return out
+
+
+def looks_like_header_row(header: Sequence[str], body: Sequence[Sequence[str]]) -> bool:
+    """Is the first row a real header, as opposed to a first data row?
+
+    Deliberately does NOT require the cells to be unique: a merged header
+    cell (e.g. a "Delivery" cell spanning two sub-columns "Skilled" /
+    "Unskilled" via a Word gridSpan) legitimately produces the same label
+    for more than one column, and that's still a perfectly good header.
+    """
+    if not header:
+        return False
+    nonempty = [h for h in header if h and h.strip()]
+    if len(nonempty) < max(1, len(header) // 2):
+        return False
+    if body and list(header) == list(body[0]):
+        return False
+    return True
+
+
+def dedupe_column_names(names: Sequence[str]) -> List[str]:
+    """Make column labels safe for a DataFrame while keeping real names.
+
+    Repeats (from a merged header cell spanning several columns) get a
+    " (2)", " (3)", ... suffix instead of being discarded in favor of a
+    meaningless "col_1" placeholder.
+    """
+    seen: dict = {}
+    out = []
+    for raw in names:
+        name = (raw or "").strip() or "Unnamed"
+        if name in seen:
+            seen[name] += 1
+            out.append(f"{name} ({seen[name]})")
+        else:
+            seen[name] = 1
+            out.append(name)
+    return out

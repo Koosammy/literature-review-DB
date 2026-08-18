@@ -188,7 +188,7 @@ class DocxExtractor:
 
         from docx import Document
 
-        from .utils import normalize_rows, rows_look_like_table
+        from .utils import dedupe_column_names, looks_like_header_row, normalize_rows, rows_look_like_table
 
         tables: List[ExtractedTable] = []
         try:
@@ -198,16 +198,20 @@ class DocxExtractor:
             return tables
 
         for idx, table in enumerate(doc.tables):
+            # `row.cells` already resolves gridSpan/vMerge (a merged header
+            # cell spanning several columns, e.g. "Delivery" over
+            # "Skilled"/"Unskilled" sub-columns, correctly repeats its text
+            # into each spanned column) -- no raw XML walking needed here.
             rows = [[cell.text.strip() for cell in row.cells] for row in table.rows]
             rows = normalize_rows(rows)
             if not rows_look_like_table(rows):
                 continue
 
             header, *body = rows
-            if header and all(h for h in header) and len(set(header)) == len(header):
-                df = pd.DataFrame(body, columns=header)
+            if looks_like_header_row(header, body):
+                df = pd.DataFrame(body, columns=dedupe_column_names(header))
             else:
-                df = pd.DataFrame(rows, columns=[f"col_{i + 1}" for i in range(len(rows[0]))])
+                df = pd.DataFrame(rows, columns=[f"Column {i + 1}" for i in range(len(rows[0]))])
 
             image_bytes = self._render_table_image(df, f"Table {idx + 1}")
             tables.append(
@@ -224,27 +228,134 @@ class DocxExtractor:
         return tables
 
     def _render_table_image(self, df: pd.DataFrame, title: str) -> bytes:
+        """Draw the table with real text measurement so columns/rows autofit
+        to their content and text never overlaps.
+
+        matplotlib's ``ax.table`` cells have fixed heights and don't wrap
+        text, which overlaps or clips anything longer than the cell -- so
+        this draws directly with Pillow instead, using the TrueType fonts
+        matplotlib already bundles (no new dependency) for exact pixel
+        measurement of each line before laying out the grid.
+        """
         import io as _io
 
         import matplotlib
+        from PIL import Image, ImageDraw, ImageFont
 
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
+        font_dir = Path(matplotlib.get_data_path()) / "fonts" / "ttf"
+        font_size, title_font_size = 15, 20
+        regular_font = ImageFont.truetype(str(font_dir / "DejaVuSans.ttf"), font_size)
+        bold_font = ImageFont.truetype(str(font_dir / "DejaVuSans-Bold.ttf"), font_size)
+        title_font = ImageFont.truetype(str(font_dir / "DejaVuSans-Bold.ttf"), title_font_size)
 
-        n_rows, n_cols = df.shape
-        fig_width = max(6, min(20, n_cols * 2.2))
-        fig_height = max(2, min(15, (n_rows + 2) * 0.4))
+        columns = [str(c) for c in df.columns]
+        rows = [["" if pd.isna(v) else str(v) for v in row] for row in df.itertuples(index=False, name=None)]
+        n_cols = len(columns)
 
-        fig, ax = plt.subplots(figsize=(fig_width, fig_height))
-        ax.axis("off")
-        tbl = ax.table(cellText=df.values, colLabels=df.columns, cellLoc="left", loc="center")
-        tbl.auto_set_font_size(False)
-        tbl.set_fontsize(10)
-        tbl.scale(1, 1.4)
-        ax.set_title(title, fontsize=12, fontweight="bold")
+        pad_x, pad_y, line_gap = 12, 8, 4
+        min_col_w, max_col_w = 90, 280
+
+        measure_img = Image.new("RGB", (1, 1))
+        measure_draw = ImageDraw.Draw(measure_img)
+
+        def text_width(s: str, font: ImageFont.FreeTypeFont) -> float:
+            return measure_draw.textlength(s, font=font)
+
+        def line_height(font: ImageFont.FreeTypeFont) -> int:
+            bbox = font.getbbox("Ag")
+            return (bbox[3] - bbox[1]) + line_gap
+
+        def wrap(text: str, font: ImageFont.FreeTypeFont, col_width: int) -> List[str]:
+            avail = max(col_width - 2 * pad_x, 10)
+            lines: List[str] = []
+            for para in str(text).split("\n"):
+                if not para:
+                    lines.append("")
+                    continue
+                words = para.split(" ")
+                current = words[0]
+                for word in words[1:]:
+                    candidate = f"{current} {word}"
+                    if text_width(candidate, font) <= avail:
+                        current = candidate
+                    else:
+                        lines.append(current)
+                        current = word
+                lines.append(current)
+            return lines or [""]
+
+        # Column widths: size to the longest line each column actually
+        # contains (header or data), clamped to a sane min/max so one long
+        # cell can't blow out the whole table -- it wraps instead.
+        col_widths = []
+        for c in range(n_cols):
+            natural = max((text_width(part, bold_font) for part in columns[c].split("\n")), default=0)
+            for row in rows:
+                for part in row[c].split("\n"):
+                    natural = max(natural, text_width(part, regular_font))
+            col_widths.append(int(min(max(natural + 2 * pad_x, min_col_w), max_col_w)))
+
+        header_lines = [wrap(columns[c], bold_font, col_widths[c]) for c in range(n_cols)]
+        header_h = max((len(lines) for lines in header_lines), default=1) * line_height(bold_font) + 2 * pad_y
+
+        body_lines: List[List[List[str]]] = []
+        row_heights: List[int] = []
+        reg_line_h = line_height(regular_font)
+        for row in rows:
+            cell_lines = [wrap(row[c], regular_font, col_widths[c]) for c in range(n_cols)]
+            body_lines.append(cell_lines)
+            row_heights.append(max((len(cl) for cl in cell_lines), default=1) * reg_line_h + 2 * pad_y)
+
+        table_w = sum(col_widths)
+        title_h = line_height(title_font) + 2 * pad_y if title else 0
+        table_h = header_h + sum(row_heights)
+
+        img = Image.new("RGB", (table_w + 1, title_h + table_h + 1), "white")
+        draw = ImageDraw.Draw(img)
+
+        y = 0
+        if title:
+            draw.text((table_w / 2, title_h / 2), title, font=title_font, fill="#1a1a1a", anchor="mm")
+            y = title_h
+
+        header_top = y
+        draw.rectangle([0, y, table_w, y + header_h], fill=(46, 92, 138))
+        x = 0
+        for c in range(n_cols):
+            cy = y + pad_y
+            for line in header_lines[c]:
+                draw.text((x + pad_x, cy), line, font=bold_font, fill="white")
+                cy += line_height(bold_font)
+            x += col_widths[c]
+        y += header_h
+
+        for r_idx, cell_lines in enumerate(body_lines):
+            rh = row_heights[r_idx]
+            draw.rectangle([0, y, table_w, y + rh], fill="#f2f2f2" if r_idx % 2 else "white")
+            x = 0
+            for c in range(n_cols):
+                cy = y + pad_y
+                for line in cell_lines[c]:
+                    draw.text((x + pad_x, cy), line, font=regular_font, fill="#222222")
+                    cy += reg_line_h
+                x += col_widths[c]
+            y += rh
+
+        border = "#999999"
+        x = 0
+        for c in range(n_cols + 1):
+            draw.line([(x, header_top), (x, header_top + table_h)], fill=border)
+            if c < n_cols:
+                x += col_widths[c]
+        y = header_top
+        draw.line([(0, y), (table_w, y)], fill=border)
+        y += header_h
+        draw.line([(0, y), (table_w, y)], fill=border)
+        for rh in row_heights:
+            y += rh
+            draw.line([(0, y), (table_w, y)], fill=border)
 
         buf = _io.BytesIO()
-        fig.savefig(buf, format="png", dpi=200, bbox_inches="tight")
-        plt.close(fig)
+        img.save(buf, format="PNG")
         buf.seek(0)
         return buf.read()
