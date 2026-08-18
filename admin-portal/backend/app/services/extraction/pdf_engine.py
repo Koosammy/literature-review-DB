@@ -29,7 +29,15 @@ import pandas as pd
 import pymupdf as fitz
 
 from .models import BBox, ExtractedFigure, ExtractedTable, ExtractionResult
-from .utils import normalize_rows, overlap_ratio, pad_bbox, rows_look_like_table, sha256_bytes
+from .utils import (
+    dedupe_column_names,
+    looks_like_header_row,
+    normalize_rows,
+    overlap_ratio,
+    pad_bbox,
+    rows_look_like_table,
+    sha256_bytes,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -214,14 +222,11 @@ class PdfExtractor:
 
     def _rows_to_dataframe(self, rows: List[List[str]]) -> pd.DataFrame:
         header, *body = rows
-        # Use the first row as the header only if it doesn't have blank
-        # cells (a genuine header row); otherwise fall back to generic names
-        # so we never silently drop the first data row.
-        if header and all(h.strip() for h in header) and len(set(header)) == len(header):
-            df = pd.DataFrame(body, columns=header)
+        if looks_like_header_row(header, body):
+            df = pd.DataFrame(body, columns=dedupe_column_names(header))
         else:
             ncols = len(rows[0])
-            df = pd.DataFrame(rows, columns=[f"col_{i + 1}" for i in range(ncols)])
+            df = pd.DataFrame(rows, columns=[f"Column {i + 1}" for i in range(ncols)])
         return df
 
     # ------------------------------------------------------------------ #
