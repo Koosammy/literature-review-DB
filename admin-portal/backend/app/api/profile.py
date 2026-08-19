@@ -12,7 +12,6 @@ from PIL import Image, UnidentifiedImageError
 from app.database import get_db
 from app.models.user import User
 from app.api.auth import get_current_user
-from app.core.config import settings
 
 # Add logging
 logger = logging.getLogger(__name__)
@@ -104,7 +103,7 @@ async def change_profile_image(
     db: Session = Depends(get_db),
 ) -> Dict[str, str]:
     """Explicit route for an authenticated user to change their profile photo."""
-    return await _save_profile_image(file, current_user, db)
+    return await _save_profile_image(request, file, current_user, db)
 
 
 @router.get("/image/{user_id}")
