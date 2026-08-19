@@ -41,8 +41,15 @@ def _profile_response_image(request: Request, user: User) -> Optional[str]:
     return _profile_image_url(request, user.id) if user.profile_image_data else user.profile_image
 
 
-def _profile_response_image_for_stored_value(user: User) -> Optional[str]:
-    return user.profile_image if user.profile_image_data else None
+def _profile_image_storage_status(user: User) -> Dict[str, Any]:
+    image_data = user.profile_image_data
+    return {
+        "storage_backend": "database",
+        "profile_image_url": user.profile_image if image_data else None,
+        "has_image_data": image_data is not None,
+        "image_size_bytes": len(image_data) if image_data else 0,
+        "content_type": user.profile_image_content_type,
+    }
 
 
 async def _save_profile_image(
@@ -232,18 +239,17 @@ async def debug_profile(
             "department": current_user.department,
             "phone": current_user.phone,
             "about": current_user.about,
-            "disciplines": current_@router.get("/image/debug")
+            "disciplines": current_user.disciplines,
+            "profile_image": current_user.profile_image,
+        },
+        "timestamp": datetime.utcnow().isoformat()
+    }
+
+@router.get("/image/debug")
 async def debug_profile_image(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
     """Report database-backed profile image state without inspecting disk."""
     db.refresh(current_user)
-    image_data = current_user.profile_image_data
-    return {
-        "storage_backend": "database",
-        "profile_image_url": _profile_response_image_for_stored_value(current_user),
-        "has_image_data": image_data is not None,
-        "image_size_bytes": len(image_data) if image_data else 0,
-        "content_type": current_user.profile_image_content_type,
-    }
+    return _profile_image_storage_status(current_user)
