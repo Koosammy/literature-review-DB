@@ -41,6 +41,10 @@ def _profile_response_image(request: Request, user: User) -> Optional[str]:
     return _profile_image_url(request, user.id) if user.profile_image_data else user.profile_image
 
 
+def _profile_response_image_for_stored_value(user: User) -> Optional[str]:
+    return user.profile_image if user.profile_image_data else None
+
+
 async def _save_profile_image(
     request: Request,
     file: UploadFile,
@@ -228,36 +232,18 @@ async def debug_profile(
             "department": current_user.department,
             "phone": current_user.phone,
             "about": current_user.about,
-            "disciplines": current_user.disciplines,
-            "profile_image": current_user.profile_image,
-        },
-        "timestamp": datetime.utcnow().isoformat()
-    }
-
-@router.get("/image/debug")
+            "disciplines": current_@router.get("/image/debug")
 async def debug_profile_image(
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ) -> Dict[str, Any]:
-    """Debug profile image paths"""
-    import os
-    from pathlib import Path
-    
-    base_dir = Path(__file__).resolve().parent.parent
-    upload_dir = base_dir / "uploads" / "profile_images"
-    
-    user_images = []
-    if upload_dir.exists():
-        user_dir = upload_dir / f"user_{current_user.id}"
-        if user_dir.exists():
-            user_images = [f.name for f in user_dir.iterdir() if f.is_file()]
-    
+    """Report database-backed profile image state without inspecting disk."""
+    db.refresh(current_user)
+    image_data = current_user.profile_image_data
     return {
-        "current_profile_image": current_user.profile_image,
-        "upload_dir_exists": upload_dir.exists(),
-        "user_dir": str(upload_dir / f"user_{current_user.id}"),
-        "user_dir_exists": (upload_dir / f"user_{current_user.id}").exists(),
-        "images_in_user_dir": user_images,
-        "full_path": str(upload_dir / current_user.profile_image) if current_user.profile_image else None,
-        "file_exists": (upload_dir / current_user.profile_image).exists() if current_user.profile_image else False
+        "storage_backend": "database",
+        "profile_image_url": _profile_response_image_for_stored_value(current_user),
+        "has_image_data": image_data is not None,
+        "image_size_bytes": len(image_data) if image_data else 0,
+        "content_type": current_user.profile_image_content_type,
     }
