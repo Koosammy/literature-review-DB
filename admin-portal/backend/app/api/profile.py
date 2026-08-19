@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Response, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request, Response, status
 from sqlalchemy.orm import Session
 from typing import Dict, Any
 from pydantic import BaseModel, EmailStr
@@ -12,7 +12,6 @@ from PIL import Image, UnidentifiedImageError
 from app.database import get_db
 from app.models.user import User
 from app.api.auth import get_current_user
-from app.core.config import settings
 
 # Add logging
 logger = logging.getLogger(__name__)
@@ -32,15 +31,22 @@ class ProfileUpdate(BaseModel):
     about: Optional[str] = None
     disciplines: Optional[str] = None
 
-def _profile_image_url(user_id: int) -> str:
-    return f"{settings.BACKEND_URL.rstrip('/')}/api/profile/image/{user_id}"
+def _profile_image_url(request: Request, user_id: int) -> str:
+    # Build the URL from the backend request that successfully reached this
+    # service. This avoids stale or renamed Render hostnames in BACKEND_URL.
+    return str(request.url_for("serve_profile_image", user_id=user_id))
 
 
-def _profile_response_image(user: User) -> Optional[str]:
-    return _profile_image_url(user.id) if user.profile_image_data else user.profile_image
+def _profile_response_image(request: Request, user: User) -> Optional[str]:
+    return _profile_image_url(request, user.id) if user.profile_image_data else user.profile_image
 
 
-async def _save_profile_image(file: UploadFile, current_user: User, db: Session) -> Dict[str, str]:
+async def _save_profile_image(
+    request: Request,
+    file: UploadFile,
+    current_user: User,
+    db: Session,
+) -> Dict[str, str]:
     content_type = (file.content_type or "").lower()
     if content_type not in ALLOWED_PROFILE_TYPES:
         raise HTTPException(
@@ -64,7 +70,7 @@ async def _save_profile_image(file: UploadFile, current_user: User, db: Session)
         current_user.profile_image_data = image_bytes
         current_user.profile_image_content_type = content_type
         # Store a stable public URL instead of an ephemeral filesystem path.
-        current_user.profile_image = _profile_image_url(current_user.id)
+        current_user.profile_image = _profile_image_url(request, current_user.id)
         db.commit()
         db.refresh(current_user)
     except Exception:
@@ -80,22 +86,24 @@ async def _save_profile_image(file: UploadFile, current_user: User, db: Session)
 
 @router.post("/image")
 async def upload_profile_image(
+    request: Request,
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Dict[str, str]:
     """Upload the first profile photo or replace the existing one."""
-    return await _save_profile_image(file, current_user, db)
+    return await _save_profile_image(request, file, current_user, db)
 
 
 @router.put("/image")
 async def change_profile_image(
+    request: Request,
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Dict[str, str]:
     """Explicit route for an authenticated user to change their profile photo."""
-    return await _save_profile_image(file, current_user, db)
+    return await _save_profile_image(request, file, current_user, db)
 
 
 @router.get("/image/{user_id}")
@@ -132,6 +140,7 @@ async def delete_profile_image(
 
 @router.put("")
 async def update_profile(
+    request: Request,
     profile_data: ProfileUpdate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -164,7 +173,7 @@ async def update_profile(
             "phone": current_user.phone,
             "about": current_user.about,
             "disciplines": current_user.disciplines,
-            "profile_image": _profile_response_image(current_user),
+            "profile_image": _profile_response_image(request, current_user),
             "role": current_user.role,
             "is_active": current_user.is_active,
             "created_at": current_user.created_at.isoformat() if current_user.created_at else None
@@ -180,6 +189,7 @@ async def update_profile(
 
 @router.get("")
 async def get_profile(
+    request: Request,
     current_user: User = Depends(get_current_user)
 ) -> Dict[str, Any]:
     """Get current user's profile"""
