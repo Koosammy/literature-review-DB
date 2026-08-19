@@ -1,23 +1,26 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Response, status
 from sqlalchemy.orm import Session
 from typing import Dict, Any
 from pydantic import BaseModel, EmailStr
 from typing import Optional
 from datetime import datetime
+import io
 import logging
+
+from PIL import Image, UnidentifiedImageError
 
 from app.database import get_db
 from app.models.user import User
 from app.api.auth import get_current_user
-from app.services.image_upload import ImageUploadService
+from app.core.config import settings
 
 # Add logging
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# Initialize the image upload service for profiles
-profile_image_service = ImageUploadService(upload_dir="uploads/profile_images")
+MAX_PROFILE_IMAGE_BYTES = 5 * 1024 * 1024
+ALLOWED_PROFILE_TYPES = {"image/jpeg", "image/png", "image/webp"}
 
 # Profile update schema
 class ProfileUpdate(BaseModel):
@@ -29,54 +32,103 @@ class ProfileUpdate(BaseModel):
     about: Optional[str] = None
     disciplines: Optional[str] = None
 
+def _profile_image_url(user_id: int) -> str:
+    return f"{settings.BACKEND_URL.rstrip('/')}/api/profile/image/{user_id}"
+
+
+def _profile_response_image(user: User) -> Optional[str]:
+    return _profile_image_url(user.id) if user.profile_image_data else user.profile_image
+
+
+async def _save_profile_image(file: UploadFile, current_user: User, db: Session) -> Dict[str, str]:
+    content_type = (file.content_type or "").lower()
+    if content_type not in ALLOWED_PROFILE_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="Profile photo must be JPEG, PNG, or WebP.",
+        )
+
+    image_bytes = await file.read(MAX_PROFILE_IMAGE_BYTES + 1)
+    if not image_bytes:
+        raise HTTPException(status_code=400, detail="The uploaded image is empty.")
+    if len(image_bytes) > MAX_PROFILE_IMAGE_BYTES:
+        raise HTTPException(status_code=413, detail="Profile photo must not exceed 5 MB.")
+
+    try:
+        with Image.open(io.BytesIO(image_bytes)) as image:
+            image.verify()
+    except (UnidentifiedImageError, OSError):
+        raise HTTPException(status_code=400, detail="The uploaded file is not a valid image.")
+
+    try:
+        current_user.profile_image_data = image_bytes
+        current_user.profile_image_content_type = content_type
+        # Store a stable public URL instead of an ephemeral filesystem path.
+        current_user.profile_image = _profile_image_url(current_user.id)
+        db.commit()
+        db.refresh(current_user)
+    except Exception:
+        db.rollback()
+        logger.exception("Failed to store profile photo for user %s", current_user.id)
+        raise HTTPException(status_code=500, detail="Could not save the profile photo.")
+
+    return {
+        "image_url": f"{current_user.profile_image}?v={int(datetime.utcnow().timestamp())}",
+        "path": current_user.profile_image,
+    }
+
+
 @router.post("/image")
 async def upload_profile_image(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ) -> Dict[str, str]:
-    """Upload or replace profile image"""
-    # Delete existing image if any
-    if current_user.profile_image:
-        try:
-            await profile_image_service.delete_image(current_user.profile_image)
-        except Exception:
-            pass
-    
-    try:
-        # Save image and get the relative path
-        path = await profile_image_service.save_image(file, f"user_{current_user.id}")
-        
-        # Store the full relative path including user directory
-        full_relative_path = f"user_{current_user.id}/{path}" if not path.startswith(f"user_{current_user.id}") else path
-        
-        current_user.profile_image = full_relative_path
-        db.commit()
-        
-        return {
-            "image_url": f"/api/uploads/profile_images/{full_relative_path}",
-            "path": full_relative_path
-        }
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=400, detail=str(e))
+    """Upload the first profile photo or replace the existing one."""
+    return await _save_profile_image(file, current_user, db)
+
+
+@router.put("/image")
+async def change_profile_image(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> Dict[str, str]:
+    """Explicit route for an authenticated user to change their profile photo."""
+    return await _save_profile_image(file, current_user, db)
+
+
+@router.get("/image/{user_id}")
+async def serve_profile_image(user_id: int, db: Session = Depends(get_db)) -> Response:
+    """Serve a public profile photo directly from PostgreSQL."""
+    user = db.query(User).filter(User.id == user_id, User.is_active == True).first()
+    if not user or not user.profile_image_data:
+        raise HTTPException(status_code=404, detail="Profile photo not found.")
+
+    return Response(
+        content=bytes(user.profile_image_data),
+        media_type=user.profile_image_content_type or "image/jpeg",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
+
 
 @router.delete("/image")
 async def delete_profile_image(
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ) -> Dict[str, str]:
-    """Delete profile image"""
-    if current_user.profile_image:
-        try:
-            await profile_image_service.delete_image(current_user.profile_image)
-            current_user.profile_image = None
-            db.commit()
-        except Exception as e:
-            db.rollback()
-            raise HTTPException(status_code=400, detail=str(e))
-    
+    """Delete the current user's database-backed profile photo."""
+    try:
+        current_user.profile_image = None
+        current_user.profile_image_data = None
+        current_user.profile_image_content_type = None
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Could not delete the profile photo.")
+
     return {"message": "Profile image deleted successfully"}
+
 
 @router.put("")
 async def update_profile(
@@ -112,7 +164,7 @@ async def update_profile(
             "phone": current_user.phone,
             "about": current_user.about,
             "disciplines": current_user.disciplines,
-            "profile_image": current_user.profile_image,
+            "profile_image": _profile_response_image(current_user),
             "role": current_user.role,
             "is_active": current_user.is_active,
             "created_at": current_user.created_at.isoformat() if current_user.created_at else None
