@@ -60,8 +60,7 @@ class Settings(BaseSettings):
         "https://literature-admin-backend.onrender.com"
     ]
     
-    # Upload settings
-    UPLOAD_DIR: str = "uploads"
+    # Runtime uploads are validated in memory and persisted to PostgreSQL.
     MAX_UPLOAD_SIZE: int = 10 * 1024 * 1024  # 10MB
     ALLOWED_IMAGE_EXTENSIONS: set = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
     
