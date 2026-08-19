@@ -44,10 +44,10 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "Literature Review Database - Admin Portal"
     VERSION: str = "1.0.0"
     DESCRIPTION: str = "Admin portal for managing literature review database"
-    ADMIN_SITE_URL: str = "https://research-hub-admin-portal.onrender.com"
+    ADMIN_SITE_URL: str = "https://research-hub-admin-portal-xn6w.onrender.com"
     
     # Frontend URL for password reset links
-    FRONTEND_URL: str = "https://research-hub-admin-portal.onrender.com"
+    FRONTEND_URL: str = "https://research-hub-admin-portal-xn6w.onrender.com"
     
     # Backend URL (for API calls)
     BACKEND_URL: str = "https://literature-admin-backend.onrender.com"
@@ -56,7 +56,7 @@ class Settings(BaseSettings):
     CORS_ORIGINS: Union[List[str], str] = [
         "http://localhost:3001", 
         "http://127.0.0.1:3001",
-        "https://research-hub-admin-portal.onrender.com",
+        "https://research-hub-admin-portal-xn6w.onrender.com",
         "https://literature-admin-backend.onrender.com"
     ]
     
