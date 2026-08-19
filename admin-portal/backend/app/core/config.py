@@ -15,7 +15,13 @@ class Settings(BaseSettings):
     # Password Reset
     RESET_TOKEN_EXPIRE_MINUTES: int = 15
     
-    # Email Configuration - All required, no Optional
+    # Gmail API (HTTPS) credentials. This is the preferred transport on
+    # Render Free because outbound SMTP ports are blocked.
+    GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "")
+    GOOGLE_CLIENT_SECRET: str = os.getenv("GOOGLE_CLIENT_SECRET", "")
+    GOOGLE_REFRESH_TOKEN: str = os.getenv("GOOGLE_REFRESH_TOKEN", "")
+
+    # SMTP fallback for local development and paid hosts that allow SMTP.
     MAIL_USERNAME: str = os.getenv("MAIL_USERNAME", "")
     MAIL_PASSWORD: str = os.getenv("MAIL_PASSWORD", "")
     MAIL_FROM: str = os.getenv("MAIL_FROM", "")
