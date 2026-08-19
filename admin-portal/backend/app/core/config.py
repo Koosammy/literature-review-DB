@@ -15,7 +15,10 @@ class Settings(BaseSettings):
     # Password Reset
     RESET_TOKEN_EXPIRE_MINUTES: int = 15
     
-    # Email Configuration - All required, no Optional
+    # Email delivery. Prefer Brevo's HTTPS API on hosted environments;
+    # SMTP remains available as a fallback for local/compatible hosts.
+    BREVO_API_KEY: str = os.getenv("BREVO_API_KEY", "")
+
     MAIL_USERNAME: str = os.getenv("MAIL_USERNAME", "")
     MAIL_PASSWORD: str = os.getenv("MAIL_PASSWORD", "")
     MAIL_FROM: str = os.getenv("MAIL_FROM", "")
