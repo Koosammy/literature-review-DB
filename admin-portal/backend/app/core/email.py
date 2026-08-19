@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import logging
 import secrets
 import socket
@@ -8,6 +9,7 @@ from email.message import EmailMessage
 from typing import Optional
 
 import aiosmtplib
+import httpx
 from pydantic import EmailStr
 
 from .config import settings
@@ -47,10 +49,19 @@ MAIL_FROM = settings.MAIL_FROM or settings.MAIL_USERNAME
 MAIL_FROM_NAME = settings.MAIL_FROM_NAME
 FRONTEND_URL = settings.FRONTEND_URL
 
-EMAIL_CONFIGURED = bool(settings.MAIL_USERNAME and settings.MAIL_PASSWORD)
+GMAIL_API_CONFIGURED = bool(
+    settings.GOOGLE_CLIENT_ID
+    and settings.GOOGLE_CLIENT_SECRET
+    and settings.GOOGLE_REFRESH_TOKEN
+    and MAIL_FROM
+)
+SMTP_CONFIGURED = bool(settings.MAIL_USERNAME and settings.MAIL_PASSWORD)
+EMAIL_CONFIGURED = GMAIL_API_CONFIGURED or SMTP_CONFIGURED
 
 logger.info("=" * 50)
-logger.info("Email Configuration (Gmail SMTP):")
+logger.info("Email Configuration:")
+logger.info(f"  GMAIL_API: {'CONFIGURED' if GMAIL_API_CONFIGURED else 'NOT SET'}")
+logger.info(f"  SMTP_FALLBACK: {'CONFIGURED' if SMTP_CONFIGURED else 'NOT SET'}")
 logger.info(f"  MAIL_SERVER: {settings.MAIL_SERVER}:{settings.MAIL_PORT}")
 logger.info(f"  MAIL_USERNAME: {'SET' if settings.MAIL_USERNAME else 'NOT SET'}")
 logger.info(f"  MAIL_PASSWORD: {'SET' if settings.MAIL_PASSWORD else 'NOT SET'}")
@@ -59,13 +70,60 @@ logger.info(f"  FRONTEND_URL: {FRONTEND_URL}")
 logger.info("=" * 50)
 
 if not EMAIL_CONFIGURED:
-    logger.warning("⚠️ MAIL_USERNAME/MAIL_PASSWORD not set - emails will not be sent")
+    logger.warning("⚠️ Gmail API OAuth credentials and SMTP credentials are not configured")
 
 
 def generate_reset_token(length: int = 32) -> str:
     """Generate a secure alphanumeric token"""
     alphabet = string.ascii_letters + string.digits
     return ''.join(secrets.choice(alphabet) for _ in range(length))
+
+
+async def _gmail_api_access_token() -> str:
+    """Exchange the stored OAuth refresh token for a short-lived access token."""
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        response = await client.post(
+            "https://oauth2.googleapis.com/token",
+            data={
+                "client_id": settings.GOOGLE_CLIENT_ID,
+                "client_secret": settings.GOOGLE_CLIENT_SECRET,
+                "refresh_token": settings.GOOGLE_REFRESH_TOKEN,
+                "grant_type": "refresh_token",
+            },
+        )
+    response.raise_for_status()
+    return response.json()["access_token"]
+
+
+async def _send_email_gmail_api(message: EmailMessage, to_email: str) -> bool:
+    """Send a MIME message through Gmail's HTTPS API."""
+    try:
+        access_token = await _gmail_api_access_token()
+        raw = base64.urlsafe_b64encode(message.as_bytes()).decode("ascii")
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            response = await client.post(
+                "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "Accept": "application/json",
+                    "Content-Type": "application/json",
+                },
+                json={"raw": raw},
+            )
+        response.raise_for_status()
+        message_id = response.json().get("id", "unknown")
+        logger.info(f"✅ Gmail API sent email to {to_email} (message {message_id})")
+        return True
+    except httpx.HTTPStatusError as exc:
+        logger.error(
+            "❌ Gmail API rejected email to %s: HTTP %s: %s",
+            to_email,
+            exc.response.status_code,
+            exc.response.text[:500],
+        )
+    except (httpx.HTTPError, KeyError, ValueError) as exc:
+        logger.error(f"❌ Gmail API failed for {to_email}: {type(exc).__name__}: {exc}")
+    return False
 
 
 async def send_email_smtp(
@@ -78,7 +136,7 @@ async def send_email_smtp(
     MAIL_SERVER/MAIL_PORT)."""
 
     if not EMAIL_CONFIGURED:
-        logger.error("❌ SMTP not configured (MAIL_USERNAME/MAIL_PASSWORD missing)")
+        logger.error("❌ Email is not configured")
         return False
 
     message = EmailMessage()
@@ -88,6 +146,11 @@ async def send_email_smtp(
     message.set_content("This email requires an HTML-capable email client to view.")
     message.add_alternative(html_content, subtype="html")
 
+    if GMAIL_API_CONFIGURED:
+        logger.info(f"📧 Sending email via Gmail HTTPS API to {to_email}")
+        return await _send_email_gmail_api(message, to_email)
+
+    # SMTP is retained only as a fallback for environments that permit it.
     # Gmail supports both STARTTLS on 587 and implicit TLS on 465. Some
     # hosting networks block only one of these routes, so try the configured
     # transport first and then the other Gmail transport on connection errors.
@@ -347,17 +410,26 @@ async def send_welcome_email(
 
 
 async def test_email_connection() -> dict:
-    """Test the SMTP connection/login without sending an email."""
-
+    """Test the active email transport without sending a message."""
     result = {
-        "provider": f"SMTP ({settings.MAIL_SERVER}:{settings.MAIL_PORT})",
+        "provider": "Gmail API (HTTPS)" if GMAIL_API_CONFIGURED else f"SMTP ({settings.MAIL_SERVER}:{settings.MAIL_PORT})",
         "configured": EMAIL_CONFIGURED,
         "mail_from": MAIL_FROM,
-        "username_set": bool(settings.MAIL_USERNAME),
-        "password_set": bool(settings.MAIL_PASSWORD),
+        "gmail_api_configured": GMAIL_API_CONFIGURED,
+        "smtp_configured": SMTP_CONFIGURED,
     }
 
-    if EMAIL_CONFIGURED:
+    if GMAIL_API_CONFIGURED:
+        try:
+            await _gmail_api_access_token()
+            result["status"] = "✅ Gmail API authenticated"
+        except httpx.HTTPStatusError as exc:
+            result["status"] = f"❌ Google OAuth HTTP {exc.response.status_code}: {exc.response.text[:300]}"
+        except (httpx.HTTPError, KeyError, ValueError) as exc:
+            result["status"] = f"❌ {type(exc).__name__}: {str(exc)}"
+        return result
+
+    if SMTP_CONFIGURED:
         try:
             with _force_ipv4_dns():
                 smtp = aiosmtplib.SMTP(
@@ -371,8 +443,10 @@ async def test_email_connection() -> dict:
                 await smtp.connect()
                 await smtp.login(settings.MAIL_USERNAME, settings.MAIL_PASSWORD)
                 await smtp.quit()
-            result["status"] = "✅ Connected and authenticated"
-        except Exception as e:
-            result["status"] = f"❌ {type(e).__name__}: {str(e)}"
+            result["status"] = "✅ SMTP connected and authenticated"
+        except Exception as exc:
+            result["status"] = f"❌ {type(exc).__name__}: {str(exc)}"
+    else:
+        result["status"] = "❌ Email is not configured"
 
     return result
