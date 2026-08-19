@@ -24,7 +24,8 @@ import {
   Badge as BadgeIcon,
   CalendarToday as CalendarIcon,
   Security as SecurityIcon,
-  Verified as VerifiedIcon
+  Verified as VerifiedIcon,
+  PhotoCamera as PhotoCameraIcon
 } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
@@ -33,6 +34,8 @@ import { adminApi } from '../services/adminApi';
 const ProfilePage: React.FC = () => {
   const { user, updateUser } = useAuth();
   const [editing, setEditing] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [photoError, setPhotoError] = useState('');
   
   const [profileData, setProfileData] = useState({
     full_name: user?.full_name || '',
@@ -43,6 +46,23 @@ const ProfilePage: React.FC = () => {
     about: user?.about || '',
     disciplines: user?.disciplines || ''
   });
+
+  const handlePhotoChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    setUploadingPhoto(true);
+    setPhotoError('');
+    try {
+      const result = await adminApi.changeProfileImage(file);
+      updateUser({ profile_image: result.image_url });
+    } catch (error: any) {
+      setPhotoError(error.message || 'Could not change your profile photo.');
+    } finally {
+      setUploadingPhoto(false);
+    }
+  };
 
   const handleEdit = () => {
     setEditing(true);
@@ -140,6 +160,8 @@ const ProfilePage: React.FC = () => {
         </Box>
       </motion.div>
 
+      {photoError && <Alert severity="error" sx={{ mb: 3 }}>{photoError}</Alert>}
+
       <Grid container spacing={4}>
         {/* Profile Header Card */}
         <Grid item xs={12}>
@@ -158,19 +180,38 @@ const ProfilePage: React.FC = () => {
             >
               <CardContent sx={{ p: 4 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: { xs: 'wrap', md: 'nowrap' } }}>
-                  {/* Profile Avatar */}
-                  <Avatar
-                    sx={{
-                      width: 100,
-                      height: 100,
-                      background: 'linear-gradient(135deg, #0a4f3c 0%, #2a9d7f 100%)',
-                      fontSize: '2.5rem',
-                      fontWeight: 700,
-                      boxShadow: '0 8px 32px rgba(10,79,60,0.3)'
-                    }}
-                  >
-                    {user?.full_name?.charAt(0) || 'U'}
-                  </Avatar>
+                  {/* Profile Avatar and replacement control */}
+                  <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
+                    <Avatar
+                      src={user?.profile_image || undefined}
+                      sx={{
+                        width: 100,
+                        height: 100,
+                        background: 'linear-gradient(135deg, #0a4f3c 0%, #2a9d7f 100%)',
+                        fontSize: '2.5rem',
+                        fontWeight: 700,
+                        boxShadow: '0 8px 32px rgba(10,79,60,0.3)'
+                      }}
+                    >
+                      {user?.full_name?.charAt(0) || 'U'}
+                    </Avatar>
+                    <Button
+                      component="label"
+                      size="small"
+                      variant="outlined"
+                      startIcon={<PhotoCameraIcon />}
+                      disabled={uploadingPhoto}
+                      sx={{ borderRadius: 2, textTransform: 'none', color: '#0a4f3c', borderColor: '#0a4f3c' }}
+                    >
+                      {uploadingPhoto ? 'Uploading…' : user?.profile_image ? 'Change Photo' : 'Add Photo'}
+                      <input
+                        hidden
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        onChange={handlePhotoChange}
+                      />
+                    </Button>
+                  </Box>
 
                   {/* Profile Info */}
                   <Box sx={{ flexGrow: 1, minWidth: 0 }}>

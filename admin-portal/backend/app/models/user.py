@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Boolean, ForeignKey, DateTime, Text
+from sqlalchemy import Column, String, Boolean, ForeignKey, DateTime, Text, LargeBinary
 from sqlalchemy.orm import relationship
 from .base import BaseModel
 
@@ -14,7 +14,12 @@ class User(BaseModel):
     institution = Column(String(255))  # displayed as "School" in the UI
     department = Column(String(255))
     phone = Column(String(20))
+    # Public URL for clients plus durable image bytes stored in PostgreSQL.
+    # Render Free has an ephemeral filesystem, so profile photos must not
+    # depend on files under uploads/.
     profile_image = Column(String, nullable=True)
+    profile_image_data = Column(LargeBinary, nullable=True)
+    profile_image_content_type = Column(String(100), nullable=True)
     about = Column(Text, nullable=True)
     disciplines = Column(Text, nullable=True)
     role = Column(String(50), default="faculty")

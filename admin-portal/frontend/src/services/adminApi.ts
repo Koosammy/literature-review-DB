@@ -400,6 +400,15 @@ class AdminApiService {
     return response.data;
   }
 
+  async changeProfileImage(file: File): Promise<{ image_url: string; path: string }> {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await this.api.put('/profile/image', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data;
+  }
+
   async deleteProfileImage(): Promise<any> {
     const response = await this.api.delete('/profile/image');
     return response.data;

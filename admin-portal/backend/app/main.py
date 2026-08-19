@@ -395,6 +395,8 @@ def _apply_lightweight_migrations() -> None:
     statements = [
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS title VARCHAR(20)",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS must_set_password BOOLEAN NOT NULL DEFAULT FALSE",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_image_data BYTEA",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_image_content_type VARCHAR(100)",
     ]
     # A separate connection/transaction per statement: on Postgres, one
     # failed statement aborts the rest of its transaction, so sharing one
