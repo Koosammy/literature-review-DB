@@ -277,7 +277,6 @@ async def bulk_import_users(
 @router.post("/{user_id}/resend-invite")
 async def resend_invite(
     user_id: int,
-    background_tasks: BackgroundTasks,
     current_user: User = Depends(require_main_coordinator),
     db: Session = Depends(get_db)
 ):
@@ -296,15 +295,22 @@ async def resend_invite(
     user.reset_token_expires = datetime.utcnow() + INVITE_EXPIRY
     db.commit()
 
-    background_tasks.add_task(
-        send_welcome_email,
+    delivered = await send_welcome_email(
         email=user.email,
         full_name=user.full_name,
         activation_url=_activation_url(user.reset_token),
         is_resend=True,
     )
+    if not delivered:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=(
+                "The activation link was refreshed, but Gmail could not be reached. "
+                "No email was sent; please try again after checking the backend email logs."
+            ),
+        )
 
-    return {"message": f"Activation email resent to {user.email}"}
+    return {"message": f"Activation email resent to {user.email}", "delivered": True}
 
 @router.get("/{user_id}", response_model=UserResponse)
 async def get_user(

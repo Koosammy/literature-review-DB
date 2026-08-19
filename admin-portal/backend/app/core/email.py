@@ -88,35 +88,48 @@ async def send_email_smtp(
     message.set_content("This email requires an HTML-capable email client to view.")
     message.add_alternative(html_content, subtype="html")
 
-    attempts = 3
-    for attempt in range(1, attempts + 1):
-        try:
-            logger.info(f"📧 Sending email via SMTP ({settings.MAIL_SERVER}) to {to_email} (attempt {attempt}/{attempts})")
+    # Gmail supports both STARTTLS on 587 and implicit TLS on 465. Some
+    # hosting networks block only one of these routes, so try the configured
+    # transport first and then the other Gmail transport on connection errors.
+    configured = (
+        settings.MAIL_PORT,
+        settings.MAIL_STARTTLS,
+        settings.MAIL_SSL_TLS,
+    )
+    alternate = (465, False, True) if settings.MAIL_PORT != 465 else (587, True, False)
+    transports = [configured]
+    if settings.MAIL_SERVER == "smtp.gmail.com" and alternate != configured:
+        transports.append(alternate)
 
+    for attempt, (port, start_tls, use_tls) in enumerate(transports, start=1):
+        try:
+            logger.info(
+                f"📧 Sending email via SMTP ({settings.MAIL_SERVER}:{port}) "
+                f"to {to_email} (transport {attempt}/{len(transports)})"
+            )
             with _force_ipv4_dns():
                 await aiosmtplib.send(
                     message,
                     hostname=settings.MAIL_SERVER,
-                    port=settings.MAIL_PORT,
+                    port=port,
                     username=settings.MAIL_USERNAME,
                     password=settings.MAIL_PASSWORD,
-                    start_tls=settings.MAIL_STARTTLS,
-                    use_tls=settings.MAIL_SSL_TLS,
+                    start_tls=start_tls,
+                    use_tls=use_tls,
                     validate_certs=settings.VALIDATE_CERTS,
-                    timeout=15.0,
+                    timeout=20.0,
                 )
             logger.info(f"✅ Email sent successfully to {to_email}")
             return True
 
         except aiosmtplib.SMTPAuthenticationError as e:
-            # Credentials are wrong -- retrying won't help, fail fast.
-            logger.error(f"❌ Failed to send email: {type(e).__name__}: {e}")
+            logger.error(f"❌ Gmail authentication failed: {type(e).__name__}: {e}")
             return False
-
         except Exception as e:
-            logger.error(f"❌ Failed to send email (attempt {attempt}/{attempts}): {type(e).__name__}: {e}")
-            if attempt < attempts:
-                await asyncio.sleep(2 * attempt)
+            logger.error(
+                f"❌ Email transport {attempt}/{len(transports)} failed "
+                f"({settings.MAIL_SERVER}:{port}): {type(e).__name__}: {e}"
+            )
 
     return False
 
