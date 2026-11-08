@@ -6,6 +6,7 @@ import httpx
 from pydantic import EmailStr
 
 from .config import settings
+from ..templates.email import render_letterhead
 
 logger = logging.getLogger(__name__)
 
@@ -95,117 +96,45 @@ async def send_email_brevo(
 
 
 async def send_password_reset_email(email: EmailStr, username: str, reset_url: str) -> bool:
-    """Send password reset email"""
-
-    logger.info(f"=" * 50)
-    logger.info(f"Password Reset Email Request")
-    logger.info(f"  To: {email}")
-    logger.info(f"  Username: {username}")
-    logger.info(f"=" * 50)
-
-    html = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    </head>
-    <body style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
-        <div style="background: linear-gradient(135deg, #0a4f3c 0%, #2a9d7f 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-            <h1 style="margin: 0; font-size: 24px;">🔐 Password Reset Request</h1>
-            <p style="margin: 10px 0 0 0; opacity: 0.9;">UHAS Research Hub Admin Portal</p>
-        </div>
-
-        <div style="background: white; padding: 30px; border-radius: 0 0 10px 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
-            <p style="font-size: 16px; color: #333;">Hello <strong>{username}</strong>,</p>
-
-            <p style="font-size: 16px; color: #555; line-height: 1.6;">
-                We received a request to reset your password. Click the button below to create a new password:
-            </p>
-
-            <div style="text-align: center; margin: 30px 0;">
-                <a href="{reset_url}"
-                   style="display: inline-block; padding: 15px 40px; background: linear-gradient(135deg, #0a4f3c 0%, #2a9d7f 100%); color: white; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px; box-shadow: 0 4px 15px rgba(10,79,60,0.3);">
-                    Reset My Password
-                </a>
-            </div>
-
-            <div style="background: #fff3cd; border: 1px solid #ffeeba; color: #856404; padding: 15px; border-radius: 8px; margin: 20px 0;">
-                <strong>⏰ This link expires in 30 minutes</strong>
-                <p style="margin: 5px 0 0 0; font-size: 14px;">For security reasons, this password reset link will expire soon.</p>
-            </div>
-
-            <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 20px 0;">
-                <p style="margin: 0; font-size: 14px; color: #666;">
-                    <strong>Can't click the button?</strong> Copy and paste this link into your browser:
-                </p>
-                <p style="margin: 10px 0 0 0; word-break: break-all; font-size: 12px; color: #0a4f3c; background: #e9ecef; padding: 10px; border-radius: 4px;">
-                    {reset_url}
-                </p>
-            </div>
-
-            <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
-
-            <p style="font-size: 13px; color: #888; text-align: center;">
-                If you didn't request this password reset, you can safely ignore this email.
-            </p>
-        </div>
-
-        <div style="text-align: center; padding: 20px; color: #888; font-size: 12px;">
-            <p>© 2024 UHAS Research Hub. All rights reserved.</p>
-        </div>
-    </body>
-    </html>
-    """
-
+    """Send the link for choosing a new password."""
+    html = render_letterhead(
+        name=username,
+        title="Reset your password",
+        message=(
+            "We received a request to reset the password for your Research Hub account. "
+            "Use the link below to choose a new password."
+        ),
+        action="Reset password",
+        url=reset_url,
+        expiry="Link expires in 30 minutes",
+        note="If you did not request a reset, you can ignore this email.",
+    )
     success = await send_email_brevo(
         to_email=email,
         to_name=username,
-        subject="🔐 Password Reset Request - UHAS Research Hub",
-        html_content=html
+        subject="Reset your UHAS Research Hub password",
+        html_content=html,
     )
-
     if not success:
-        logger.error(f"Failed to send password reset email to {email}")
-
+        logger.error("Failed to send password reset email to %s", email)
     return success
 
 
 async def send_password_reset_confirmation(email: EmailStr, username: str) -> bool:
-    """Send confirmation after password reset"""
-
-    html = f"""
-    <!DOCTYPE html>
-    <html>
-    <body style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-        <div style="background: linear-gradient(135deg, #0a4f3c 0%, #2a9d7f 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-            <h1 style="margin: 0;">✅ Password Reset Successful</h1>
-        </div>
-
-        <div style="background: white; padding: 30px; border-radius: 0 0 10px 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
-            <p>Hello <strong>{username}</strong>,</p>
-            <p>Your password has been successfully reset.</p>
-
-            <div style="text-align: center; margin: 30px 0;">
-                <a href="{FRONTEND_URL}/#/login"
-                   style="display: inline-block; padding: 15px 40px; background: #0a4f3c; color: white; text-decoration: none; border-radius: 8px; font-weight: bold;">
-                    Login Now
-                </a>
-            </div>
-
-            <p style="color: #888; font-size: 14px;">
-                If you didn't make this change, please contact support immediately.
-            </p>
-        </div>
-    </body>
-    </html>
-    """
-
+    """Send confirmation after password reset."""
+    html = render_letterhead(
+        name=username,
+        title="Password changed",
+        message="Your Research Hub password has been updated. You can now sign in with your new password.",
+        action="Sign in",
+        url=f"{FRONTEND_URL}/#/login",
+        note="If you did not make this change, contact the Research Hub administrator immediately.",
+    )
     return await send_email_brevo(
         to_email=email,
         to_name=username,
-        subject="✅ Password Reset Successful - UHAS Research Hub",
-        html_content=html
+        subject="Your UHAS Research Hub password was changed",
+        html_content=html,
     )
 
 
@@ -221,84 +150,39 @@ async def send_welcome_email(
     activation_url: str,
     is_resend: bool = False,
 ) -> bool:
-    """Send the account-activation email for admin-created / bulk-imported
-    users -- no password is ever emailed; the link lets them set their own
-    and (on the activation page) upload the profile photo shown alongside
-    their supervised work on the public site."""
+    """Send the account-activation email for admin-created and imported users."""
+    if is_resend:
+        subject = "New activation link for your UHAS Research Hub account"
+        title = "New account activation link"
+        message = (
+            "A new link is available to activate your Research Hub account. "
+            "Use it to set your password and upload your profile photo."
+        )
+    else:
+        subject = "Activate your UHAS Research Hub account"
+        title = "Activate your account"
+        message = (
+            "An account has been created for you on the UHAS Research Hub Admin Portal. "
+            "Activate it to set your password and upload your profile photo."
+        )
 
-    logger.info("=" * 50)
-    logger.info(f"{'Resend welcome' if is_resend else 'Welcome'} email")
-    logger.info(f"  To: {email}")
-    logger.info("=" * 50)
-
-    heading = "You're invited back to finish setting up" if is_resend else "Welcome to UHAS Research Hub"
-
-    html = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    </head>
-    <body style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
-        <div style="background: linear-gradient(135deg, #0a4f3c 0%, #2a9d7f 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-            <h1 style="margin: 0; font-size: 24px;">👋 {heading}</h1>
-            <p style="margin: 10px 0 0 0; opacity: 0.9;">UHAS Research Hub Admin Portal</p>
-        </div>
-
-        <div style="background: white; padding: 30px; border-radius: 0 0 10px 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
-            <p style="font-size: 16px; color: #333;">Hello <strong>{full_name}</strong>,</p>
-
-            <p style="font-size: 16px; color: #555; line-height: 1.6;">
-                An account has been created for you on the UHAS Research Hub Admin Portal.
-                Click the button below to set your password and finish setting up your account.
-            </p>
-
-            <div style="text-align: center; margin: 30px 0;">
-                <a href="{activation_url}"
-                   style="display: inline-block; padding: 15px 40px; background: linear-gradient(135deg, #0a4f3c 0%, #2a9d7f 100%); color: white; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px; box-shadow: 0 4px 15px rgba(10,79,60,0.3);">
-                    Set Up My Account
-                </a>
-            </div>
-
-            <div style="background: #fff3cd; border: 1px solid #ffeeba; color: #856404; padding: 15px; border-radius: 8px; margin: 20px 0;">
-                <strong>⏰ This link expires in 7 days</strong>
-                <p style="margin: 5px 0 0 0; font-size: 14px;">You'll be asked to choose a password and upload a profile photo before you can sign in.</p>
-            </div>
-
-            <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 20px 0;">
-                <p style="margin: 0; font-size: 14px; color: #666;">
-                    <strong>Can't click the button?</strong> Copy and paste this link into your browser:
-                </p>
-                <p style="margin: 10px 0 0 0; word-break: break-all; font-size: 12px; color: #0a4f3c; background: #e9ecef; padding: 10px; border-radius: 4px;">
-                    {activation_url}
-                </p>
-            </div>
-
-            <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
-
-            <p style="font-size: 13px; color: #888; text-align: center;">
-                If you weren't expecting this, you can ignore this email.
-            </p>
-        </div>
-
-        <div style="text-align: center; padding: 20px; color: #888; font-size: 12px;">
-            <p>© 2024 UHAS Research Hub. All rights reserved.</p>
-        </div>
-    </body>
-    </html>
-    """
-
+    html = render_letterhead(
+        name=full_name,
+        title=title,
+        message=message,
+        action="Activate account",
+        url=activation_url,
+        expiry="Link expires in 7 days",
+        note="If you were not expecting this invitation, you can ignore this email.",
+    )
     success = await send_email_brevo(
         to_email=email,
         to_name=full_name,
-        subject=("Finish setting up your account" if is_resend else "Welcome to UHAS Research Hub") + " - UHAS Research Hub",
-        html_content=html
+        subject=subject,
+        html_content=html,
     )
-
     if not success:
-        logger.error(f"Failed to send welcome email to {email}")
-
+        logger.error("Failed to send welcome email to %s", email)
     return success
 
 
