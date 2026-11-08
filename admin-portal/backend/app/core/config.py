@@ -1,3 +1,4 @@
+from pydantic import field_validator
 from pydantic_settings import BaseSettings
 from typing import List, Union, Optional
 import json
@@ -6,6 +7,15 @@ import os
 class Settings(BaseSettings):
     # Database - Same as public site
     DATABASE_URL: str
+
+    @field_validator("DATABASE_URL")
+    @classmethod
+    def select_postgres_driver(cls, value: str) -> str:
+        scheme, separator, address = value.partition("://")
+        # Keep using the installed psycopg2 driver with SQLAlchemy 2.1 and newer.
+        if separator and scheme in {"postgres", "postgresql"}:
+            return f"postgresql+psycopg2://{address}"
+        return value
     
     # Admin Authentication
     SECRET_KEY: str
