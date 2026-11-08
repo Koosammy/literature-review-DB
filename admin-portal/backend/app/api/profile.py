@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request, Response, status
 from sqlalchemy.orm import Session
 from typing import Dict, Any
-from pydantic import BaseModel, EmailStr
 from typing import Optional
 from datetime import datetime
 import io
@@ -11,6 +10,7 @@ from PIL import Image, UnidentifiedImageError
 
 from app.database import get_db
 from app.models.user import User
+from app.schemas.user import ProfileUpdate
 from app.api.auth import get_current_user
 
 # Add logging
@@ -20,16 +20,6 @@ router = APIRouter()
 
 MAX_PROFILE_IMAGE_BYTES = 5 * 1024 * 1024
 ALLOWED_PROFILE_TYPES = {"image/jpeg", "image/png", "image/webp"}
-
-# Profile update schema
-class ProfileUpdate(BaseModel):
-    full_name: Optional[str] = None
-    email: Optional[EmailStr] = None
-    institution: Optional[str] = None
-    department: Optional[str] = None
-    phone: Optional[str] = None
-    about: Optional[str] = None
-    disciplines: Optional[str] = None
 
 def _profile_image_url(request: Request, user_id: int) -> str:
     # Build the URL from the backend request that successfully reached this
@@ -163,7 +153,7 @@ async def update_profile(
         logger.info(f"Update data: {profile_data.dict(exclude_unset=True)}")
         
         # Update only provided fields
-        update_data = profile_data.dict(exclude_unset=True)
+        update_data = current_user.resolve_name_update(profile_data.model_dump(exclude_unset=True))
         
         for field, value in update_data.items():
             if hasattr(current_user, field):
@@ -178,7 +168,7 @@ async def update_profile(
             "id": current_user.id,
             "username": current_user.username,
             "email": current_user.email,
-            "full_name": current_user.full_name,
+            **current_user.name_details,
             "institution": current_user.institution,
             "department": current_user.department,
             "phone": current_user.phone,
@@ -208,7 +198,7 @@ async def get_profile(
         "id": current_user.id,
         "username": current_user.username,
         "email": current_user.email,
-        "full_name": current_user.full_name,
+        **current_user.name_details,
         "institution": current_user.institution,
         "department": current_user.department,
         "phone": current_user.phone,
@@ -234,7 +224,7 @@ async def debug_profile(
             "id": current_user.id,
             "username": current_user.username,
             "email": current_user.email,
-            "full_name": current_user.full_name,
+            **current_user.name_details,
             "institution": current_user.institution,
             "department": current_user.department,
             "phone": current_user.phone,

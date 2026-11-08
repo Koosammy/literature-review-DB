@@ -66,12 +66,14 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { adminApi, BulkImportResult } from '../services/adminApi';
 import { User } from '../types';
 import { useAuth } from '../contexts/AuthContext';
+import { getNameParts } from '../utils/userNames';
 
 const TITLE_OPTIONS = ['Dr.', 'Prof.', 'Mr.', 'Mrs.', 'Ms.'];
 
 interface UserFormData {
   email: string;
-  full_name: string;
+  first_name: string;
+  last_name: string;
   title: string;
   institution: string;
   department: string;
@@ -91,7 +93,7 @@ const UsersPage: React.FC = () => {
   const [schools, setSchools] = useState<string[]>([]);
   const [formData, setFormData] = useState<UserFormData>({
     email: '',
-    full_name: '',
+    ...getNameParts(),
     title: '',
     institution: '',
     department: '',
@@ -134,7 +136,7 @@ const UsersPage: React.FC = () => {
       setEditingUser(user);
       setFormData({
         email: user.email,
-        full_name: user.full_name,
+        ...getNameParts(user),
         title: user.title || '',
         institution: user.institution || '',
         department: user.department || '',
@@ -145,7 +147,7 @@ const UsersPage: React.FC = () => {
       setEditingUser(null);
       setFormData({
         email: '',
-        full_name: '',
+        ...getNameParts(),
         title: '',
         institution: '',
         department: '',
@@ -208,8 +210,9 @@ const UsersPage: React.FC = () => {
     setSubmitting(true);
 
     // Client-side validation
-    if (!formData.full_name.trim()) {
-      setFormError('Full name is required');
+    const names = { first_name: formData.first_name.trim(), last_name: formData.last_name.trim() };
+    if (!names.first_name && !names.last_name) {
+      setFormError('Enter a first name or last name');
       setSubmitting(false);
       return;
     }
@@ -221,27 +224,21 @@ const UsersPage: React.FC = () => {
     }
 
     try {
-      if (editingUser) {
-        await adminApi.updateUser(editingUser.id, {
-          full_name: formData.full_name.trim(),
-          email: formData.email.trim(),
-          title: formData.title || null,
-          institution: formData.institution || null,
-          department: formData.department.trim() || null,
-          phone: formData.phone.trim() || null,
-          role: formData.role,
-        });
-      } else {
-        const userData = {
-          email: formData.email.trim(),
-          full_name: formData.full_name.trim(),
-          title: formData.title || null,
-          institution: formData.institution || null,
-          department: formData.department.trim() || null,
-          phone: formData.phone.trim() || null,
-          role: formData.role,
-        };
+      const originalNames = getNameParts(editingUser);
+      const changedNames = names.first_name !== originalNames.first_name || names.last_name !== originalNames.last_name;
+      const userData = {
+        ...(!editingUser || changedNames ? names : {}),
+        email: formData.email.trim(),
+        title: formData.title || null,
+        institution: formData.institution || null,
+        department: formData.department.trim() || null,
+        phone: formData.phone.trim() || null,
+        role: formData.role,
+      };
 
+      if (editingUser) {
+        await adminApi.updateUser(editingUser.id, userData);
+      } else {
         await adminApi.createUser(userData);
         setSuccessMessage(`Invitation sent to ${userData.email}`);
       }
@@ -1066,36 +1063,20 @@ const UsersPage: React.FC = () => {
                 Basic Information
               </Typography>
               <Grid container spacing={3}>
-                <Grid item xs={12} md={6}>
-                  <TextField
-                    autoFocus
-                    label="Full Name"
-                    fullWidth
-                    variant="outlined"
-                    value={formData.full_name}
-                    onChange={handleInputChange('full_name')}
-                    required
-                    InputProps={{
-                      startAdornment: (
-                        <InputAdornment position="start">
-                          <PersonIcon sx={{ color: '#0a4f3c' }} />
-                        </InputAdornment>
-                      ),
-                    }}
-                    sx={{
-                      '& .MuiOutlinedInput-root': {
-                        borderRadius: 3,
-                        '&.Mui-focused fieldset': {
-                          borderColor: '#0a4f3c',
-                        },
-                      },
-                      '& .MuiInputLabel-root.Mui-focused': {
-                        color: '#0a4f3c',
-                      },
-                    }}
-                  />
-                </Grid>
-                
+                {(['first_name', 'last_name'] as const).map((field) => (
+                  <Grid item xs={12} md={6} key={field}>
+                    <TextField
+                      autoFocus={field === 'first_name'}
+                      label={field === 'first_name' ? 'First Name' : 'Last Name'}
+                      fullWidth
+                      value={formData[field]}
+                      onChange={handleInputChange(field)}
+                      autoComplete={field === 'first_name' ? 'given-name' : 'family-name'}
+                      inputProps={{ maxLength: 255 }}
+                    />
+                  </Grid>
+                ))}
+
                 <Grid item xs={12} md={6}>
                   <FormControl fullWidth>
                     <InputLabel>Title</InputLabel>
@@ -1400,7 +1381,7 @@ const UsersPage: React.FC = () => {
                   Create Users from Excel
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Columns required: Title, Full Name, Email, School
+                  Columns required: Title, First Name, Last Name, Email, School. Files with a Full Name column are also accepted.
                 </Typography>
               </Box>
             </Box>

@@ -42,7 +42,7 @@ import SEOHead from '../components/SEOHead';
 import ProjectCard from '../components/ProjectCard';
 import { motion } from 'framer-motion';
 
-const deanImage = `${process.env.PUBLIC_URL || ''}/images/dean.jpg`;
+const deanImage = `${process.env.PUBLIC_URL || ''}/images/dean.webp`;
 
 // Animation variants
 const fadeInUp = {
@@ -706,7 +706,7 @@ const HomePage: React.FC = () => {
                     <Box
                       component="img"
                       src={deanImage}
-                      alt="Dean of School of Public Health"
+                      alt="Prof. Frank Baiden, Dean of the School of Public Health"
                       sx={{
                         width: '100%',
                         height: '100%',

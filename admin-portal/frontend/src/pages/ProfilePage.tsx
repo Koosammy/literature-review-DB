@@ -30,6 +30,19 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
 import { adminApi } from '../services/adminApi';
+import type { User } from '../types';
+import { getNameParts } from '../utils/userNames';
+
+const getProfileData = (user: User | null) => ({
+  ...getNameParts(user),
+  title: user?.title || '',
+  email: user?.email || '',
+  institution: user?.institution || '',
+  department: user?.department || '',
+  phone: user?.phone || '',
+  about: user?.about || '',
+  disciplines: user?.disciplines || '',
+});
 
 const ProfilePage: React.FC = () => {
   const { user, updateUser } = useAuth();
@@ -37,15 +50,7 @@ const ProfilePage: React.FC = () => {
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [photoError, setPhotoError] = useState('');
   
-  const [profileData, setProfileData] = useState({
-    full_name: user?.full_name || '',
-    email: user?.email || '',
-    institution: user?.institution || '',
-    department: user?.department || '',
-    phone: user?.phone || '',
-    about: user?.about || '',
-    disciplines: user?.disciplines || ''
-  });
+  const [profileData, setProfileData] = useState(() => getProfileData(user));
 
   const handlePhotoChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -65,46 +70,29 @@ const ProfilePage: React.FC = () => {
   };
 
   const handleEdit = () => {
+    setProfileData(getProfileData(user));
     setEditing(true);
   };
 
   const handleCancel = () => {
     setEditing(false);
-    setProfileData({
-      full_name: user?.full_name || '',
-      email: user?.email || '',
-      institution: user?.institution || '',
-      department: user?.department || '',
-      phone: user?.phone || '',
-      about: user?.about || '',
-      disciplines: user?.disciplines || ''
-    });
+    setProfileData(getProfileData(user));
   };
 
   const handleSave = async () => {
     try {
+      const { first_name, last_name, title, ...otherFields } = profileData;
+      const originalNames = getNameParts(user);
+      const changedNames = first_name !== originalNames.first_name || last_name !== originalNames.last_name;
       const response = await adminApi.updateProfile({
-        full_name: profileData.full_name,
-        email: profileData.email,
-        institution: profileData.institution,
-        department: profileData.department,
-        phone: profileData.phone,
-        about: profileData.about,
-        disciplines: profileData.disciplines
+        ...otherFields,
+        title: title.trim() || null,
+        ...(changedNames ? { first_name: first_name.trim(), last_name: last_name.trim() } : {}),
       });
-      
+
       updateUser(response);
-      
-      setProfileData({
-        full_name: response.full_name || '',
-        email: response.email || '',
-        institution: response.institution || '',
-        department: response.department || '',
-        phone: response.phone || '',
-        about: response.about || '',
-        disciplines: response.disciplines || ''
-      });
-         
+      setProfileData(getProfileData(response));
+
       setEditing(false);
       alert('Profile updated successfully!');
     } catch (error) {
@@ -224,7 +212,7 @@ const ProfilePage: React.FC = () => {
                           fontSize: { xs: '1.5rem', md: '2rem' }
                         }}
                       >
-                        {user?.full_name || 'User Name'}
+                        {user?.formal_name || user?.full_name || 'User Name'}
                       </Typography>
                       {user?.is_active && (
                         <VerifiedIcon sx={{ color: '#4caf50', fontSize: 28 }} />
@@ -429,32 +417,31 @@ const ProfilePage: React.FC = () => {
 
               <CardContent sx={{ p: 4 }}>
                 <Grid container spacing={3}>
-                  <Grid item xs={12} md={6}>
+                  <Grid item xs={12} md={4}>
                     <TextField
-                      label="Full Name"
+                      label="Title"
                       fullWidth
-                      value={profileData.full_name}
-                      onChange={handleInputChange('full_name')}
+                      value={profileData.title}
+                      onChange={handleInputChange('title')}
                       disabled={!editing}
-                      InputProps={{
-                        startAdornment: (
-                          <PersonIcon sx={{ color: '#0a4f3c', mr: 1 }} />
-                        ),
-                      }}
-                      sx={{
-                        '& .MuiOutlinedInput-root': {
-                          borderRadius: 3,
-                          '&.Mui-focused fieldset': {
-                            borderColor: '#0a4f3c',
-                          },
-                        },
-                        '& .MuiInputLabel-root.Mui-focused': {
-                          color: '#0a4f3c',
-                        },
-                      }}
+                      placeholder="Prof. or Dr."
+                      inputProps={{ maxLength: 20 }}
                     />
                   </Grid>
-                  
+                  {(['first_name', 'last_name'] as const).map((field) => (
+                    <Grid item xs={12} md={4} key={field}>
+                      <TextField
+                        label={field === 'first_name' ? 'First Name' : 'Last Name'}
+                        fullWidth
+                        value={profileData[field]}
+                        onChange={handleInputChange(field)}
+                        disabled={!editing}
+                        autoComplete={field === 'first_name' ? 'given-name' : 'family-name'}
+                        inputProps={{ maxLength: 255 }}
+                      />
+                    </Grid>
+                  ))}
+
                   <Grid item xs={12} md={6}>
                     <TextField
                       label="Email Address"

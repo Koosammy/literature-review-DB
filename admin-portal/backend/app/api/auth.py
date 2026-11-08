@@ -71,6 +71,9 @@ class UserInfo(BaseModel):
     username: str
     email: str
     full_name: str
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    formal_name: str
     title: Optional[str] = None
     role: str
     institution: Optional[str]
@@ -200,8 +203,7 @@ async def login(
             "id": user.id,
             "username": user.username,
             "email": user.email,
-            "full_name": user.full_name,
-            "title": user.title,
+            **user.name_details,
             "role": user.role,
             "institution": user.institution,
             "department": user.department,
@@ -260,8 +262,9 @@ async def forgot_password(
         background_tasks.add_task(
             send_password_reset_email,
             email=user.email,
-            username=user.username,
-            reset_url=reset_url
+            username=user.full_name,
+            reset_url=reset_url,
+            salutation=user.formal_name,
         )
         logger.info(f"Password reset email queued for: {user.email}")
     except Exception as e:
@@ -333,8 +336,7 @@ async def reset_password(
             "id": user.id,
             "username": user.username,
             "email": user.email,
-            "full_name": user.full_name,
-            "title": user.title,
+            **user.name_details,
             "role": user.role,
             "institution": user.institution,
             "department": user.department,
@@ -396,15 +398,14 @@ async def get_current_user_info(
         id=current_user.id,
         username=current_user.username,
         email=current_user.email,
-        full_name=current_user.full_name,
-        title=current_user.title,
         role=current_user.role,
         institution=current_user.institution,
         department=current_user.department,
         profile_image=current_user.profile_image,
         is_active=current_user.is_active,
         must_set_password=current_user.must_set_password,
-        created_at=current_user.created_at
+        created_at=current_user.created_at,
+        **current_user.name_details,
     )
 
 @router.post("/logout", status_code=status.HTTP_200_OK)
