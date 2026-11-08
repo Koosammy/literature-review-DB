@@ -31,7 +31,9 @@ interface TokenVerificationResponse {
 
 // Profile Update Interface
 interface ProfileUpdateData {
-  full_name: string;
+  first_name?: string;
+  last_name?: string;
+  title: string | null;
   email: string;
   institution: string;
   department: string;

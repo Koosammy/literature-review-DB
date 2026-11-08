@@ -93,7 +93,10 @@ export interface User {
   username: string;
   email: string;
   full_name: string;
-  title?: string;
+  first_name?: string | null;
+  last_name?: string | null;
+  formal_name?: string;
+  title?: string | null;
   institution?: string;
   department?: string;
   phone?: string;

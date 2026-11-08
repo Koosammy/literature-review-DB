@@ -11,6 +11,8 @@ class User(BaseModel):
     hashed_password = Column(String(255), nullable=False)
     title = Column(String(20), nullable=True)  # e.g. Dr., Prof., Mr., Mrs.
     full_name = Column(String(255), nullable=False)
+    first_name = Column(String(255), nullable=True)
+    last_name = Column(String(255), nullable=True)
     institution = Column(String(255))  # displayed as "School" in the UI
     department = Column(String(255))
     phone = Column(String(20))
@@ -41,6 +43,50 @@ class User(BaseModel):
     def __repr__(self):
         return f"<User(id={self.id}, username='{self.username}', email='{self.email}', role='{self.role}')>"
     
+    @property
+    def name_parts(self) -> tuple[str, str]:
+        if self.first_name is not None or self.last_name is not None:
+            return self.first_name or "", self.last_name or ""
+        parts = (self.full_name or "").rsplit(maxsplit=1)
+        return (parts[0], parts[1]) if len(parts) == 2 else ((parts[0] if parts else ""), "")
+
+    @property
+    def formal_name(self) -> str:
+        title = (self.title or "").strip()
+        if title:
+            _, last_name = self.name_parts
+            return f"{title} {last_name or self.full_name}"
+        return self.full_name
+
+    @property
+    def name_details(self) -> dict:
+        return {
+            "full_name": self.full_name,
+            "first_name": self.first_name,
+            "last_name": self.last_name,
+            "title": self.title,
+            "formal_name": self.formal_name,
+        }
+
+    def resolve_name_update(self, fields: dict) -> dict:
+        """Keep the legacy display name in sync when either name field changes."""
+        if "first_name" in fields or "last_name" in fields:
+            first_name, last_name = self.name_parts
+            first_name = (fields.get("first_name", first_name) or "").strip()
+            last_name = (fields.get("last_name", last_name) or "").strip()
+            full_name = " ".join(part for part in (first_name, last_name) if part)
+            fields = {**fields, "first_name": first_name or None, "last_name": last_name or None}
+        elif "full_name" in fields:
+            full_name = (fields["full_name"] or "").strip()
+            if full_name != self.full_name:
+                fields = {**fields, "first_name": None, "last_name": None}
+        else:
+            return fields
+
+        if not full_name or len(full_name) > 255:
+            raise ValueError("Enter a name between 1 and 255 characters.")
+        return {**fields, "full_name": full_name}
+
     @property
     def is_main_coordinator(self):
         """Check if user is a main coordinator"""

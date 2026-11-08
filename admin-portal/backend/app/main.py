@@ -227,6 +227,8 @@ def _apply_lightweight_migrations() -> None:
 
     statements = [
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS title VARCHAR(20)",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS first_name VARCHAR(255)",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_name VARCHAR(255)",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS must_set_password BOOLEAN NOT NULL DEFAULT FALSE",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_image_data BYTEA",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_image_content_type VARCHAR(100)",

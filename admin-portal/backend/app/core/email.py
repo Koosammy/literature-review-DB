@@ -95,10 +95,12 @@ async def send_email_brevo(
     return True
 
 
-async def send_password_reset_email(email: EmailStr, username: str, reset_url: str) -> bool:
+async def send_password_reset_email(
+    email: EmailStr, username: str, reset_url: str, *, salutation: str | None = None
+) -> bool:
     """Send the link for choosing a new password."""
     html = render_letterhead(
-        name=username,
+        name=salutation or username,
         title="Reset your password",
         message=(
             "We received a request to reset the password for your Research Hub account. "
@@ -120,10 +122,12 @@ async def send_password_reset_email(email: EmailStr, username: str, reset_url: s
     return success
 
 
-async def send_password_reset_confirmation(email: EmailStr, username: str) -> bool:
+async def send_password_reset_confirmation(
+    email: EmailStr, username: str, *, salutation: str | None = None
+) -> bool:
     """Send confirmation after password reset."""
     html = render_letterhead(
-        name=username,
+        name=salutation or username,
         title="Password changed",
         message="Your Research Hub password has been updated. You can now sign in with your new password.",
         action="Sign in",
@@ -149,6 +153,8 @@ async def send_welcome_email(
     full_name: str,
     activation_url: str,
     is_resend: bool = False,
+    *,
+    salutation: str | None = None,
 ) -> bool:
     """Send the account-activation email for admin-created and imported users."""
     if is_resend:
@@ -167,7 +173,7 @@ async def send_welcome_email(
         )
 
     html = render_letterhead(
-        name=full_name,
+        name=salutation or full_name,
         title=title,
         message=message,
         action="Activate account",

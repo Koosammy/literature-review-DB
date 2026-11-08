@@ -1,15 +1,20 @@
-from pydantic import BaseModel, EmailStr, validator
+from pydantic import BaseModel, EmailStr, Field, validator
 from typing import Optional, List, ForwardRef
 from datetime import datetime
 
-class UserBase(BaseModel):
+class UserNameFields(BaseModel):
+    full_name: Optional[str] = Field(default=None, max_length=255)
+    first_name: Optional[str] = Field(default=None, max_length=255)
+    last_name: Optional[str] = Field(default=None, max_length=255)
+    title: Optional[str] = Field(default=None, max_length=20)
+
+
+class UserBase(UserNameFields):
     # Not settable on creation -- the backend derives it from the email
     # address (see users.py::_generate_username). Present here only so
     # UserResponse (which extends this) can return it.
     username: Optional[str] = None
     email: EmailStr
-    full_name: str
-    title: Optional[str] = None
     institution: Optional[str] = None
     department: Optional[str] = None
     phone: Optional[str] = None
@@ -51,10 +56,8 @@ class UserCreate(UserBase):
     activation link (see /api/users/ POST) instead of an admin choosing it."""
     pass
 
-class UserUpdate(BaseModel):
-    full_name: Optional[str] = None
+class UserUpdate(UserNameFields):
     email: Optional[EmailStr] = None
-    title: Optional[str] = None
     institution: Optional[str] = None
     department: Optional[str] = None
     phone: Optional[str] = None
@@ -84,6 +87,8 @@ class UserUpdate(BaseModel):
 
 class UserResponse(UserBase):
     id: int
+    full_name: str
+    formal_name: str
     is_active: bool
     must_set_password: bool = False
     created_at: datetime
@@ -129,9 +134,8 @@ class UserStats(BaseModel):
     coordinator_count: int
     recent_registrations: int
 
-class ProfileUpdate(BaseModel):
+class ProfileUpdate(UserNameFields):
     """Schema specifically for profile updates via the profile endpoint"""
-    full_name: Optional[str] = None
     email: Optional[EmailStr] = None
     institution: Optional[str] = None
     department: Optional[str] = None

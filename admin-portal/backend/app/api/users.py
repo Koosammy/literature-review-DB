@@ -54,7 +54,9 @@ def _invite_user(
     db: Session,
     *,
     email: str,
-    full_name: str,
+    full_name: str | None = None,
+    first_name: str | None = None,
+    last_name: str | None = None,
     title: str = None,
     institution: str = None,
     department: str = None,
@@ -62,13 +64,19 @@ def _invite_user(
 ) -> User:
     """Create a user with no usable password yet and a pending activation
     token. Caller is responsible for committing and sending the email."""
+    if title and len(title) > 20:
+        raise ValueError("Title must be 20 characters or fewer.")
+    name_values = {"full_name": full_name}
+    if first_name is not None or last_name is not None:
+        name_values.update(first_name=first_name, last_name=last_name)
+    names = User().resolve_name_update(name_values)
     placeholder = get_password_hash(generate_reset_token(48))
     user = User(
-        username=_generate_username(db, full_name, email),
+        username=_generate_username(db, names["full_name"], email),
         email=email,
         hashed_password=placeholder,
         title=title,
-        full_name=full_name,
+        **names,
         institution=institution,
         department=department,
         role=role,
@@ -116,6 +124,8 @@ async def create_user(
             db,
             email=user.email,
             full_name=user.full_name,
+            first_name=user.first_name,
+            last_name=user.last_name,
             title=user.title,
             institution=_normalize_school(user.institution) if user.institution else None,
             department=user.department,
@@ -129,6 +139,7 @@ async def create_user(
             send_welcome_email,
             email=db_user.email,
             full_name=db_user.full_name,
+            salutation=db_user.formal_name,
             activation_url=_activation_url(db_user.reset_token),
         )
 
@@ -136,6 +147,8 @@ async def create_user(
 
     except HTTPException:
         raise
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     except IntegrityError:
         db.rollback()
         raise HTTPException(
@@ -158,7 +171,7 @@ async def bulk_import_users(
     db: Session = Depends(get_db)
 ):
     """Create users in bulk from an uploaded .xlsx with columns
-    Title, Full Name, Email, School. Each created user gets the same
+    Title, First Name, Last Name, Email, School (or legacy Full Name). Each created user gets the same
     activation-email flow as a single manually-created user. Rows whose
     email already belongs to an existing user are skipped (not
     overwritten) and reported back, per row, in the response."""
@@ -192,13 +205,15 @@ async def bulk_import_users(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="The file is empty.")
 
     header = [str(c).strip().lower() if c is not None else "" for c in rows[0]]
-    required = ["title", "full name", "email", "school"]
+    split_names = "first name" in header and "last name" in header
+    name_columns = ["first name", "last name"] if split_names else ["full name"]
+    required = ["title", *name_columns, "email", "school"]
     missing = [col for col in required if col not in header]
     if missing:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Missing required column(s): {', '.join(missing)}. "
-                   f"Expected columns: Title, Full Name, Email, School."
+                   f"Expected columns: Title, First Name, Last Name, Email, School (or legacy Full Name)."
         )
     col_index = {name: header.index(name) for name in required}
 
@@ -213,7 +228,9 @@ async def bulk_import_users(
             return str(value).strip() if value is not None else ""
 
         email = cell("email").lower()
-        full_name = cell("full name")
+        first_name = cell("first name") if split_names else None
+        last_name = cell("last name") if split_names else None
+        full_name = " ".join(part for part in (first_name, last_name) if part) if split_names else cell("full name")
         title = cell("title") or None
         school = cell("school")
 
@@ -236,19 +253,24 @@ async def bulk_import_users(
             skipped.append({"row": row_num, "email": email, "reason": "A user with this email already exists"})
             continue
 
-        db_user = _invite_user(
-            db,
-            email=email,
-            full_name=full_name,
-            title=title,
-            institution=_normalize_school(school) if school else None,
-            role="faculty",
-        )
         try:
-            db.flush()
+            with db.begin_nested():
+                db_user = _invite_user(
+                    db,
+                    email=email,
+                    full_name=full_name,
+                    first_name=first_name,
+                    last_name=last_name,
+                    title=title,
+                    institution=_normalize_school(school) if school else None,
+                    role="faculty",
+                )
+                db.flush()
         except IntegrityError:
-            db.rollback()
-            skipped.append({"row": row_num, "email": email, "reason": "A user with this email already exists"})
+            skipped.append({"row": row_num, "email": email, "reason": "Email already exists"})
+            continue
+        except ValueError as exc:
+            skipped.append({"row": row_num, "email": email, "reason": str(exc)})
             continue
 
         seen_emails_this_file.add(email)
@@ -263,6 +285,7 @@ async def bulk_import_users(
                 send_welcome_email,
                 email=db_user.email,
                 full_name=db_user.full_name,
+                salutation=db_user.formal_name,
                 activation_url=_activation_url(db_user.reset_token),
             )
 
@@ -298,6 +321,7 @@ async def resend_invite(
     delivered = await send_welcome_email(
         email=user.email,
         full_name=user.full_name,
+        salutation=user.formal_name,
         activation_url=_activation_url(user.reset_token),
         is_resend=True,
     )
@@ -341,7 +365,10 @@ async def update_user(
         )
 
     # Update user fields
-    update_data = user_update.dict(exclude_unset=True)
+    try:
+        update_data = user.resolve_name_update(user_update.model_dump(exclude_unset=True))
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     if "institution" in update_data and update_data["institution"]:
         update_data["institution"] = _normalize_school(update_data["institution"])
     for field, value in update_data.items():
