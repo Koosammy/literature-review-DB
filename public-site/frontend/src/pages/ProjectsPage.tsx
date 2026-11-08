@@ -806,13 +806,8 @@ const ProjectsPage: React.FC = () => {
               {searchResponse.projects.map((project, index) => (
                 <Grid item xs={12} sm={6} md={4} lg={4} key={project.id}>
                   <Zoom in timeout={300 + index * 50}>
-                    <Box>
-                      <ProjectCard
-                        project={project}
-                        index={index}
-                        compact={isMobile}
-                        onClick={() => navigate(`/projects/${project.slug}`)}
-                      />
+                    <Box sx={{ height: '100%' }}>
+                      <ProjectCard project={project} />
                     </Box>
                   </Zoom>
                 </Grid>
