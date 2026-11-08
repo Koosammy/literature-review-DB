@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Response
 from fastapi.responses import StreamingResponse
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, noload
 from sqlalchemy import or_, func
 from typing import List, Optional
 import io
@@ -8,11 +8,21 @@ import logging
 
 from ..database import get_db
 from ..models.project import Project, ProjectImage
+from ..models.user import supervisor_schema_ready
 from ..schemas.project import ProjectResponse, ProjectStats, ProjectFileInfo
 from ..core.config import settings
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+def _published_project_query(db: Session):
+    if supervisor_schema_ready(db):
+        supervisors = joinedload(Project.supervisors)
+    else:
+        supervisors = noload(Project.supervisors)
+    return db.query(Project).options(supervisors).filter(Project.is_published == True)
+
 
 @router.get("/", response_model=List[ProjectResponse])
 async def get_projects(
@@ -23,7 +33,7 @@ async def get_projects(
     degree_type: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
-    query = db.query(Project).options(joinedload(Project.supervisors)).filter(Project.is_published == True)
+    query = _published_project_query(db)
 
     if search:
         query = query.filter(
@@ -46,9 +56,7 @@ async def get_projects(
 
 @router.get("/featured", response_model=List[ProjectResponse])
 async def get_featured_projects(limit: int = 6, db: Session = Depends(get_db)):
-    projects = db.query(Project).options(joinedload(Project.supervisors)).filter(
-        Project.is_published == True
-    ).order_by(Project.view_count.desc()).limit(limit).all()
+    projects = _published_project_query(db).order_by(Project.view_count.desc()).limit(limit).all()
     return projects
 
 @router.get("/stats")
@@ -130,10 +138,7 @@ async def get_project_image(
 
 @router.get("/{slug}", response_model=ProjectResponse)
 async def get_project(slug: str, db: Session = Depends(get_db)):
-    project = db.query(Project).options(joinedload(Project.supervisors)).filter(
-        Project.slug == slug,
-        Project.is_published == True
-    ).first()
+    project = _published_project_query(db).filter(Project.slug == slug).first()
     
     if not project:
         raise HTTPException(
@@ -143,12 +148,12 @@ async def get_project(slug: str, db: Session = Depends(get_db)):
     
     # Increment view count
     project.view_count = (project.view_count or 0) + 1
+    # Serialize before commit expires the loaded relationships.
+    response = ProjectResponse.model_validate(project)
     db.commit()
-    
-    # Log to verify images are included
-    logger.info(f"Project {slug} - Image records: {len(project.image_records) if project.image_records else 0}")
-    
-    return project
+
+    logger.info("Project %s - Image records: %d", slug, len(response.image_records))
+    return response
 
 @router.get("/{project_slug}/view-document")
 async def view_project_document(project_slug: str, db: Session = Depends(get_db)):

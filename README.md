@@ -368,6 +368,20 @@ MAIL_USERNAME=your-email@gmail.com
 MAIL_PASSWORD=your-app-password
 ```
 
+### Render Database Configuration
+
+The public and admin backends share the same PostgreSQL database. In each Render
+web service's Environment settings, set `DATABASE_URL` to the current connection
+URL from that database's dashboard. Use the internal URL when the database and
+services are in the same Render workspace and region. Otherwise, use the external
+URL with `sslmode=require` and allow the connecting service in the database's
+network settings. If the old database is unavailable, recover it or restore its
+backup before switching the services to a replacement.
+
+Deploy the admin backend to initialize the supervisor tables, then redeploy the
+public backend. Verify that `/api/health` and `/api/projects/featured?limit=6`
+return HTTP 200 on the public backend.
+
 ## 📞 Contact & Support
 
 For questions about this project or technical discussions, please reach out through the appropriate academic channels.

@@ -7,9 +7,11 @@ Account-sensitive columns (email, hashed_password, role, reset tokens,
 etc.) are deliberately left unmapped even though they exist on the table.
 """
 
-from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, func
-from sqlalchemy.orm import relationship
+from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, func, inspect
+from sqlalchemy.exc import NoSuchTableError
+from sqlalchemy.orm import Session, relationship
 from .base import Base
+from .project import project_supervisors
 
 
 class User(Base):
@@ -29,3 +31,16 @@ class User(Base):
         secondary="project_supervisors",
         back_populates="supervisors",
     )
+
+
+def supervisor_schema_ready(db: Session) -> bool:
+    # The admin backend can apply schema changes while the public API is running.
+    inspector = inspect(db.connection())
+    if not inspector.has_table(project_supervisors.name):
+        return False
+
+    try:
+        user_columns = {column["name"] for column in inspector.get_columns(User.__tablename__)}
+    except NoSuchTableError:
+        return False
+    return set(User.__table__.columns.keys()).issubset(user_columns)

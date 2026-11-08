@@ -88,7 +88,6 @@ class ProjectResponse(ProjectBase):
     
     class Config:
         from_attributes = True
-        orm_mode = True
 
 class SupervisorWork(BaseModel):
     """One entry in a supervisor's list of supervised, published works."""

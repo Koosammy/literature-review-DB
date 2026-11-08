@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from pathlib import Path
+from sqlalchemy.exc import OperationalError
 import os
 import logging
 import time
@@ -17,16 +17,6 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
 )
 logger = logging.getLogger(__name__)
-
-# Only create the tables this service actually owns. `users` and
-# `project_supervisors` are also mapped here (read-only, to display
-# supervisor info on a project) but are owned/created by the admin-portal
-# backend -- this service's User model only maps a subset of columns, so
-# letting create_all touch that table here could, on a fresh database
-# where this service happened to start first, create it missing NOT NULL
-# columns (email, hashed_password, ...) that admin-portal's create_all
-# would then never retroactively add.
-Base.metadata.create_all(bind=engine, tables=[Project.__table__, ProjectImage.__table__])
 
 app = FastAPI(
     title="Literature Review Public API",
@@ -130,10 +120,20 @@ async def root():
         }
     }
 
-# Optional: Add startup event for logging
 @app.on_event("startup")
-async def startup_event():
-    """Log startup information"""
+def startup_event():
+    # The admin backend owns users and project_supervisors. The public User
+    # mapping omits required account columns and cannot create that table.
+    try:
+        Base.metadata.create_all(bind=engine, tables=[Project.__table__, ProjectImage.__table__])
+    except OperationalError:
+        logger.error(
+            "Public API database startup failed. Verify that DATABASE_URL points to the "
+            "active shared PostgreSQL database. On Render, use the current internal URL "
+            "when both services and the database are in the same workspace and region."
+        )
+        raise
+
     print("=" * 60)
     print("Literature Review Public API Started")
     print("=" * 60)

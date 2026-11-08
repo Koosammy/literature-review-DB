@@ -3,8 +3,7 @@ from sqlalchemy.orm import Session
 import logging
 
 from ..database import get_db
-from ..models.user import User
-from ..models.project import Project
+from ..models.user import User, supervisor_schema_ready
 from ..schemas.project import SupervisorProfile, SupervisorWork
 
 logger = logging.getLogger(__name__)
@@ -16,6 +15,9 @@ async def get_supervisor_profile(user_id: int, db: Session = Depends(get_db)):
     """Public profile for the supervisor click-through modal: photo, bio,
     and every published work they supervise -- clicking one of those in
     the modal takes the researcher straight to that project."""
+    if not supervisor_schema_ready(db):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Supervisor not found")
+
     supervisor = db.query(User).filter(User.id == user_id, User.is_active == True).first()
     if not supervisor:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Supervisor not found")
