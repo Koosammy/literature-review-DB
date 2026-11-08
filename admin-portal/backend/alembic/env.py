@@ -14,7 +14,8 @@ from app.models import Base
 from app.core.config import settings
 
 config = context.config
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+# Alembic reads this through ConfigParser, which treats percent signs as interpolation.
+config.set_main_option("sqlalchemy.url", settings.DATABASE_URL.replace("%", "%%"))
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
