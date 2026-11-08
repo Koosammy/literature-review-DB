@@ -912,13 +912,9 @@ const HomePage: React.FC = () => {
                     whileInView={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.5, delay: index * 0.1 }}
                     viewport={{ once: true }}
+                    style={{ height: '100%' }}
                   >
-                    <ProjectCard
-                      project={project}
-                      index={index}
-                      compact={isMobile}
-                      onClick={() => navigate(`/projects/${project.slug}`)}
-                    />
+                    <ProjectCard project={project} />
                   </motion.div>
                 </Grid>
               ))}
