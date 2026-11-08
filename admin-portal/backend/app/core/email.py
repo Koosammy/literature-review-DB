@@ -1,14 +1,7 @@
-import asyncio
-import base64
 import logging
 import secrets
-import socket
 import string
-from contextlib import contextmanager
-from email.message import EmailMessage
-from typing import Optional
 
-import aiosmtplib
 import httpx
 from pydantic import EmailStr
 
@@ -16,61 +9,14 @@ from .config import settings
 
 logger = logging.getLogger(__name__)
 
-_orig_getaddrinfo = socket.getaddrinfo
-
-
-def _ipv4_only_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
-    """Filter DNS results down to IPv4. Some hosts (e.g. Render) have
-    unroutable outbound IPv6 -- when smtp.gmail.com resolves to an IPv6
-    address first, the connection attempt hangs until the full timeout
-    instead of falling back to IPv4, producing SMTPConnectTimeoutError
-    even though the server is reachable over IPv4."""
-    results = _orig_getaddrinfo(host, port, family, type, proto, flags)
-    ipv4_results = [r for r in results if r[0] == socket.AF_INET]
-    return ipv4_results or results
-
-
-@contextmanager
-def _force_ipv4_dns():
-    socket.getaddrinfo = _ipv4_only_getaddrinfo
-    try:
-        yield
-    finally:
-        socket.getaddrinfo = _orig_getaddrinfo
-
-# Gmail SMTP configuration -- reuses the Settings fields that already exist
-# for this (MAIL_USERNAME/MAIL_PASSWORD/MAIL_SERVER/MAIL_PORT/...), which
-# were previously unused after an earlier switch to a Brevo HTTP API
-# integration. For Gmail: MAIL_USERNAME is the full @gmail.com address,
-# MAIL_PASSWORD is a 16-character Google *App Password* (Google Account ->
-# Security -> 2-Step Verification -> App passwords) -- your normal Gmail
-# password will not work here.
-MAIL_FROM = settings.MAIL_FROM or settings.MAIL_USERNAME
+BREVO_API_URL = "https://api.brevo.com/v3"
+MAIL_FROM = settings.MAIL_FROM.strip()
 MAIL_FROM_NAME = settings.MAIL_FROM_NAME
 FRONTEND_URL = settings.FRONTEND_URL
-
-GMAIL_API_CONFIGURED = bool(
-    settings.GOOGLE_CLIENT_ID
-    and settings.GOOGLE_CLIENT_SECRET
-    and settings.GOOGLE_REFRESH_TOKEN
-    and MAIL_FROM
-)
-SMTP_CONFIGURED = bool(settings.MAIL_USERNAME and settings.MAIL_PASSWORD)
-EMAIL_CONFIGURED = GMAIL_API_CONFIGURED or SMTP_CONFIGURED
-
-logger.info("=" * 50)
-logger.info("Email Configuration:")
-logger.info(f"  GMAIL_API: {'CONFIGURED' if GMAIL_API_CONFIGURED else 'NOT SET'}")
-logger.info(f"  SMTP_FALLBACK: {'CONFIGURED' if SMTP_CONFIGURED else 'NOT SET'}")
-logger.info(f"  MAIL_SERVER: {settings.MAIL_SERVER}:{settings.MAIL_PORT}")
-logger.info(f"  MAIL_USERNAME: {'SET' if settings.MAIL_USERNAME else 'NOT SET'}")
-logger.info(f"  MAIL_PASSWORD: {'SET' if settings.MAIL_PASSWORD else 'NOT SET'}")
-logger.info(f"  MAIL_FROM: {MAIL_FROM}")
-logger.info(f"  FRONTEND_URL: {FRONTEND_URL}")
-logger.info("=" * 50)
+EMAIL_CONFIGURED = bool(settings.BREVO_API_KEY.get_secret_value().strip() and MAIL_FROM)
 
 if not EMAIL_CONFIGURED:
-    logger.warning("⚠️ Gmail API OAuth credentials and SMTP credentials are not configured")
+    logger.warning("Brevo email requires BREVO_API_KEY and MAIL_FROM")
 
 
 def generate_reset_token(length: int = 32) -> str:
@@ -79,122 +25,73 @@ def generate_reset_token(length: int = 32) -> str:
     return ''.join(secrets.choice(alphabet) for _ in range(length))
 
 
-async def _gmail_api_access_token() -> str:
-    """Exchange the stored OAuth refresh token for a short-lived access token."""
-    async with httpx.AsyncClient(timeout=20.0) as client:
-        response = await client.post(
-            "https://oauth2.googleapis.com/token",
-            data={
-                "client_id": settings.GOOGLE_CLIENT_ID,
-                "client_secret": settings.GOOGLE_CLIENT_SECRET,
-                "refresh_token": settings.GOOGLE_REFRESH_TOKEN,
-                "grant_type": "refresh_token",
-            },
-        )
-    response.raise_for_status()
-    return response.json()["access_token"]
-
-
-async def _send_email_gmail_api(message: EmailMessage, to_email: str) -> bool:
-    """Send a MIME message through Gmail's HTTPS API."""
-    try:
-        access_token = await _gmail_api_access_token()
-        raw = base64.urlsafe_b64encode(message.as_bytes()).decode("ascii")
-        async with httpx.AsyncClient(timeout=20.0) as client:
-            response = await client.post(
-                "https://gmail.googleapis.com/gmail/v1/users/me/messages/send",
-                headers={
-                    "Authorization": f"Bearer {access_token}",
-                    "Accept": "application/json",
-                    "Content-Type": "application/json",
-                },
-                json={"raw": raw},
-            )
+async def _brevo_request(method: str, path: str, **kwargs) -> httpx.Response:
+    async with httpx.AsyncClient(
+        base_url=BREVO_API_URL,
+        headers={
+            "api-key": settings.BREVO_API_KEY.get_secret_value().strip(),
+            "Accept": "application/json",
+        },
+        timeout=20.0,
+    ) as client:
+        response = await client.request(method, path, **kwargs)
         response.raise_for_status()
-        message_id = response.json().get("id", "unknown")
-        logger.info(f"✅ Gmail API sent email to {to_email} (message {message_id})")
-        return True
-    except httpx.HTTPStatusError as exc:
-        logger.error(
-            "❌ Gmail API rejected email to %s: HTTP %s: %s",
-            to_email,
-            exc.response.status_code,
-            exc.response.text[:500],
-        )
-    except (httpx.HTTPError, KeyError, ValueError) as exc:
-        logger.error(f"❌ Gmail API failed for {to_email}: {type(exc).__name__}: {exc}")
-    return False
+        return response
 
 
-async def send_email_smtp(
+def _brevo_error(exc: httpx.HTTPError) -> str:
+    if isinstance(exc, httpx.HTTPStatusError):
+        status = exc.response.status_code
+        if status in (401, 403):
+            return f"Brevo returned HTTP {status}. Check the API key, permissions, and IP authorization."
+        if status == 429:
+            return "Brevo returned HTTP 429. Check sending limits and API rate limits."
+        return f"Brevo rejected the request with HTTP {status}."
+    if isinstance(exc, httpx.TimeoutException):
+        return "The Brevo request timed out."
+    return f"The Brevo request failed: {type(exc).__name__}."
+
+
+async def send_email_brevo(
     to_email: str,
     to_name: str,
     subject: str,
-    html_content: str
+    html_content: str,
 ) -> bool:
-    """Send email via Gmail SMTP (or any SMTP server configured through
-    MAIL_SERVER/MAIL_PORT)."""
-
+    """Submit a transactional email through Brevo's HTTPS API."""
     if not EMAIL_CONFIGURED:
-        logger.error("❌ Email is not configured")
+        logger.error("Email is unavailable. Set BREVO_API_KEY and MAIL_FROM.")
         return False
 
-    message = EmailMessage()
-    message["From"] = f"{MAIL_FROM_NAME} <{MAIL_FROM}>"
-    message["To"] = f"{to_name} <{to_email}>" if to_name else to_email
-    message["Subject"] = subject
-    message.set_content("This email requires an HTML-capable email client to view.")
-    message.add_alternative(html_content, subtype="html")
+    recipient = {"email": to_email}
+    if to_name:
+        recipient["name"] = to_name
 
-    if GMAIL_API_CONFIGURED:
-        logger.info(f"📧 Sending email via Gmail HTTPS API to {to_email}")
-        return await _send_email_gmail_api(message, to_email)
+    try:
+        response = await _brevo_request(
+            "POST",
+            "/smtp/email",
+            json={
+                "sender": {"name": MAIL_FROM_NAME, "email": MAIL_FROM},
+                "to": [recipient],
+                "subject": subject,
+                "htmlContent": html_content,
+            },
+        )
+        message_id = response.json()["messageId"]
+    except httpx.HTTPError as exc:
+        logger.error("Email submission failed: %s", _brevo_error(exc))
+        return False
+    except (ValueError, TypeError, KeyError):
+        logger.error("Brevo returned an invalid email submission response.")
+        return False
 
-    # SMTP is retained only as a fallback for environments that permit it.
-    # Gmail supports both STARTTLS on 587 and implicit TLS on 465. Some
-    # hosting networks block only one of these routes, so try the configured
-    # transport first and then the other Gmail transport on connection errors.
-    configured = (
-        settings.MAIL_PORT,
-        settings.MAIL_STARTTLS,
-        settings.MAIL_SSL_TLS,
-    )
-    alternate = (465, False, True) if settings.MAIL_PORT != 465 else (587, True, False)
-    transports = [configured]
-    if settings.MAIL_SERVER == "smtp.gmail.com" and alternate != configured:
-        transports.append(alternate)
+    if not isinstance(message_id, str) or not message_id:
+        logger.error("Brevo did not return a message ID for the email.")
+        return False
 
-    for attempt, (port, start_tls, use_tls) in enumerate(transports, start=1):
-        try:
-            logger.info(
-                f"📧 Sending email via SMTP ({settings.MAIL_SERVER}:{port}) "
-                f"to {to_email} (transport {attempt}/{len(transports)})"
-            )
-            with _force_ipv4_dns():
-                await aiosmtplib.send(
-                    message,
-                    hostname=settings.MAIL_SERVER,
-                    port=port,
-                    username=settings.MAIL_USERNAME,
-                    password=settings.MAIL_PASSWORD,
-                    start_tls=start_tls,
-                    use_tls=use_tls,
-                    validate_certs=settings.VALIDATE_CERTS,
-                    timeout=20.0,
-                )
-            logger.info(f"✅ Email sent successfully to {to_email}")
-            return True
-
-        except aiosmtplib.SMTPAuthenticationError as e:
-            logger.error(f"❌ Gmail authentication failed: {type(e).__name__}: {e}")
-            return False
-        except Exception as e:
-            logger.error(
-                f"❌ Email transport {attempt}/{len(transports)} failed "
-                f"({settings.MAIL_SERVER}:{port}): {type(e).__name__}: {e}"
-            )
-
-    return False
+    logger.info("Brevo accepted email (message ID %s)", message_id)
+    return True
 
 
 async def send_password_reset_email(email: EmailStr, username: str, reset_url: str) -> bool:
@@ -204,7 +101,6 @@ async def send_password_reset_email(email: EmailStr, username: str, reset_url: s
     logger.info(f"Password Reset Email Request")
     logger.info(f"  To: {email}")
     logger.info(f"  Username: {username}")
-    logger.info(f"  Reset URL: {reset_url}")
     logger.info(f"=" * 50)
 
     html = f"""
@@ -262,7 +158,7 @@ async def send_password_reset_email(email: EmailStr, username: str, reset_url: s
     </html>
     """
 
-    success = await send_email_smtp(
+    success = await send_email_brevo(
         to_email=email,
         to_name=username,
         subject="🔐 Password Reset Request - UHAS Research Hub",
@@ -271,7 +167,6 @@ async def send_password_reset_email(email: EmailStr, username: str, reset_url: s
 
     if not success:
         logger.error(f"Failed to send password reset email to {email}")
-        logger.info(f"📋 MANUAL RESET LINK: {reset_url}")
 
     return success
 
@@ -306,7 +201,7 @@ async def send_password_reset_confirmation(email: EmailStr, username: str) -> bo
     </html>
     """
 
-    return await send_email_smtp(
+    return await send_email_brevo(
         to_email=email,
         to_name=username,
         subject="✅ Password Reset Successful - UHAS Research Hub",
@@ -334,7 +229,6 @@ async def send_welcome_email(
     logger.info("=" * 50)
     logger.info(f"{'Resend welcome' if is_resend else 'Welcome'} email")
     logger.info(f"  To: {email}")
-    logger.info(f"  Activation URL: {activation_url}")
     logger.info("=" * 50)
 
     heading = "You're invited back to finish setting up" if is_resend else "Welcome to UHAS Research Hub"
@@ -395,7 +289,7 @@ async def send_welcome_email(
     </html>
     """
 
-    success = await send_email_smtp(
+    success = await send_email_brevo(
         to_email=email,
         to_name=full_name,
         subject=("Finish setting up your account" if is_resend else "Welcome to UHAS Research Hub") + " - UHAS Research Hub",
@@ -404,49 +298,35 @@ async def send_welcome_email(
 
     if not success:
         logger.error(f"Failed to send welcome email to {email}")
-        logger.info(f"📋 MANUAL ACTIVATION LINK: {activation_url}")
 
     return success
 
 
 async def test_email_connection() -> dict:
-    """Test the active email transport without sending a message."""
+    """Check the Brevo credentials and sender without sending an email."""
     result = {
-        "provider": "Gmail API (HTTPS)" if GMAIL_API_CONFIGURED else f"SMTP ({settings.MAIL_SERVER}:{settings.MAIL_PORT})",
+        "provider": "Brevo (HTTPS)",
         "configured": EMAIL_CONFIGURED,
         "mail_from": MAIL_FROM,
-        "gmail_api_configured": GMAIL_API_CONFIGURED,
-        "smtp_configured": SMTP_CONFIGURED,
     }
+    if not EMAIL_CONFIGURED:
+        return {**result, "status": "Set BREVO_API_KEY and MAIL_FROM."}
 
-    if GMAIL_API_CONFIGURED:
-        try:
-            await _gmail_api_access_token()
-            result["status"] = "✅ Gmail API authenticated"
-        except httpx.HTTPStatusError as exc:
-            result["status"] = f"❌ Google OAuth HTTP {exc.response.status_code}: {exc.response.text[:300]}"
-        except (httpx.HTTPError, KeyError, ValueError) as exc:
-            result["status"] = f"❌ {type(exc).__name__}: {str(exc)}"
-        return result
+    try:
+        response = await _brevo_request("GET", "/senders")
+        senders = response.json()["senders"]
+        active_sender = any(
+            sender["active"] and sender["email"].casefold() == MAIL_FROM.casefold()
+            for sender in senders
+        )
+    except httpx.HTTPError as exc:
+        return {**result, "status": _brevo_error(exc)}
+    except (ValueError, TypeError, KeyError, AttributeError):
+        return {**result, "status": "Brevo returned an invalid sender list."}
 
-    if SMTP_CONFIGURED:
-        try:
-            with _force_ipv4_dns():
-                smtp = aiosmtplib.SMTP(
-                    hostname=settings.MAIL_SERVER,
-                    port=settings.MAIL_PORT,
-                    start_tls=settings.MAIL_STARTTLS,
-                    use_tls=settings.MAIL_SSL_TLS,
-                    validate_certs=settings.VALIDATE_CERTS,
-                    timeout=15.0,
-                )
-                await smtp.connect()
-                await smtp.login(settings.MAIL_USERNAME, settings.MAIL_PASSWORD)
-                await smtp.quit()
-            result["status"] = "✅ SMTP connected and authenticated"
-        except Exception as exc:
-            result["status"] = f"❌ {type(exc).__name__}: {str(exc)}"
-    else:
-        result["status"] = "❌ Email is not configured"
-
+    result["status"] = (
+        "Brevo authenticated and sender is active."
+        if active_sender
+        else "Brevo authenticated, but MAIL_FROM is missing or inactive in Brevo."
+    )
     return result

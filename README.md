@@ -360,13 +360,35 @@ uvicorn app.main:app --reload --port 8001
 ```
 
 ### Environment Configuration
-Create `.env` files in both backend directories with:
-```env
-DATABASE_URL=postgresql://username:password@localhost/literature_db
-SECRET_KEY=your-secret-key
-MAIL_USERNAME=your-email@gmail.com
-MAIL_PASSWORD=your-app-password
-```
+Set `DATABASE_URL` in both backend environments. In the admin backend, also set
+`SECRET_KEY`. For local development, use the `.env` file in each backend
+directory. On Render, use each service's Environment settings.
+
+### Transactional Email
+
+The admin backend sends activation invitations and password resets using
+[Brevo's transactional HTTPS API](https://developers.brevo.com/reference/send-transac-email).
+
+1. Register a sender and [authenticate its domain](https://help.brevo.com/hc/en-us/articles/12163873383186).
+2. [Create a standard Brevo API key](https://help.brevo.com/hc/en-us/articles/209467485)
+   with permission to send transactional emails. If you use the local
+   `test_email_connection()` diagnostic, grant the key permission to read senders as well.
+3. Set these variables in the admin backend environment and deploy:
+
+   | Variable | Value |
+   | --- | --- |
+   | `BREVO_API_KEY` | Brevo API key |
+   | `MAIL_FROM` | The verified sender address in Brevo |
+   | `MAIL_FROM_NAME` | Optional. Defaults to UHAS Research Hub Admin |
+
+4. Use **Resend Activation Email** on an invited test account and confirm
+   the message arrives. Check **Transactional → Emails → Logs** in Brevo
+   for delivery status.
+
+If Brevo rejects an API call with HTTP 401 or 403, check the key and its
+permissions. If IP blocking is enabled in Brevo, authorize the admin
+service's outbound ranges from **Render → Connect → Outbound**. For HTTP 429,
+check Brevo's sending quota and rate limits.
 
 ### Render Database Configuration
 
