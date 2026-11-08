@@ -255,8 +255,6 @@ async def forgot_password(
     # Generate the reset URL with hash routing
     reset_url = f"{settings.FRONTEND_URL}/#/reset-password?token={reset_token}"
     
-    logger.info(f"Reset URL generated: {reset_url}")
-    
     # Send email in background
     try:
         background_tasks.add_task(

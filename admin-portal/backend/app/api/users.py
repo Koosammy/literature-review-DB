@@ -305,8 +305,8 @@ async def resend_invite(
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=(
-                "The activation link was refreshed, but Gmail could not be reached. "
-                "No email was sent; please try again after checking the backend email logs."
+                "The activation link was refreshed, but Brevo did not confirm the email submission. "
+                "Check the backend email logs before retrying."
             ),
         )
 

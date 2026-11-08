@@ -1,8 +1,7 @@
-from pydantic import field_validator
+from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings
-from typing import List, Union, Optional
+from typing import List, Union
 import json
-import os
 
 class Settings(BaseSettings):
     # Database - Same as public site
@@ -25,24 +24,11 @@ class Settings(BaseSettings):
     # Password Reset
     RESET_TOKEN_EXPIRE_MINUTES: int = 15
     
-    # Gmail API (HTTPS) credentials. This is the preferred transport on
-    # Render Free because outbound SMTP ports are blocked.
-    GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "")
-    GOOGLE_CLIENT_SECRET: str = os.getenv("GOOGLE_CLIENT_SECRET", "")
-    GOOGLE_REFRESH_TOKEN: str = os.getenv("GOOGLE_REFRESH_TOKEN", "")
-
-    # SMTP fallback for local development and paid hosts that allow SMTP.
-    MAIL_USERNAME: str = os.getenv("MAIL_USERNAME", "")
-    MAIL_PASSWORD: str = os.getenv("MAIL_PASSWORD", "")
-    MAIL_FROM: str = os.getenv("MAIL_FROM", "")
+    # Transactional email through Brevo's HTTPS API.
+    BREVO_API_KEY: SecretStr = SecretStr("")
+    MAIL_FROM: str = ""
     MAIL_FROM_NAME: str = "UHAS Research Hub Admin"
-    MAIL_PORT: int = 587
-    MAIL_SERVER: str = "smtp.gmail.com"
-    MAIL_STARTTLS: bool = True
-    MAIL_SSL_TLS: bool = False
-    USE_CREDENTIALS: bool = True
-    VALIDATE_CERTS: bool = True
-    
+
     # File Upload - Database Storage
     MAX_FILE_SIZE: int = 10 * 1024 * 1024  # 10MB for database storage
     ALLOWED_FILE_TYPES: List[str] = [".pdf", ".doc", ".docx", ".txt", ".rtf"]
@@ -78,6 +64,8 @@ class Settings(BaseSettings):
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = False
+        # Older local .env files may still include retired email settings.
+        extra = "ignore"
     
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -91,9 +79,6 @@ class Settings(BaseSettings):
                     self.CORS_ORIGINS = [origin.strip() for origin in self.CORS_ORIGINS.split(",")]
                 else:
                     self.CORS_ORIGINS = [self.CORS_ORIGINS.strip()]
-        
-        # Set MAIL_FROM to MAIL_USERNAME if empty
-        if not self.MAIL_FROM and self.MAIL_USERNAME:
-            self.MAIL_FROM = self.MAIL_USERNAME
+
 
 settings = Settings()

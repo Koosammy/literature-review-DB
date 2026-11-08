@@ -17,9 +17,8 @@ pydantic[email]>=2.10.1
 pydantic-settings>=2.1.0
 python-dotenv>=1.0.0
 
-# Email and communication
-fastapi-mail>=1.5.0
-aiosmtplib>=3.0.2
+# Transactional email
+httpx>=0.25.0
 email-validator>=2.2.0
 
 # File handling and image processing
@@ -36,7 +35,6 @@ pandas==2.1.4
 matplotlib==3.8.2                    # Fallback table rendering when LibreOffice is unavailable for DOCX
 openpyxl==3.1.2
 pdfplumber>=0.9.0                    # Page-level fallback table detector
-httpx>=0.25.0
 
 # Note: DOCX table extraction gets pixel-accurate table crops by converting
 # to PDF with a headless LibreOffice (`soffice`) and reusing the PDF engine.
