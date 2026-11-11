@@ -1601,7 +1601,7 @@ const ProjectsPage: React.FC = () => {
                                 },
                                 fontSize: '1rem',
                                 lineHeight: 1.6,
-                                fontFamily: 'inherit',
+                                fontFamily: 'Aptos, Calibri, "Segoe UI", Arial, sans-serif',
                                 '& blockquote': {
                                   borderLeft: '3px solid #0a4f3c',
                                   paddingLeft: 2,
@@ -1665,7 +1665,8 @@ const ProjectsPage: React.FC = () => {
                               bgcolor: 'white',
                               minHeight: abstractFullscreen ? 400 : 150,
                               maxHeight: abstractFullscreen ? 'calc(90vh - 200px)' : 300,
-                              overflow: 'auto'
+                              overflow: 'auto',
+                              fontFamily: 'Aptos, Calibri, "Segoe UI", Arial, sans-serif'
                             }}
                             dangerouslySetInnerHTML={{ __html: formData.abstract }}
                           />

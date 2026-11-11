@@ -9,6 +9,8 @@ interface AuthContextType {
   updateUser: (userData: Partial<User>) => void;
   setSession: (token: string, userData: User) => void;
   loading: boolean;
+  sessionCheckFailed: boolean;
+  checkAuthStatus: () => Promise<void>;
   isAuthenticated: boolean;
 }
 
@@ -29,36 +31,37 @@ interface AuthProviderProps {
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [sessionCheckFailed, setSessionCheckFailed] = useState(false);
 
-  useEffect(() => {
-    checkAuthStatus();
-  }, []);
-
-  const checkAuthStatus = async () => {
+  const checkAuthStatus = React.useCallback(async () => {
+    setLoading(true);
+    setSessionCheckFailed(false);
+    const token = localStorage.getItem('admin_token');
     try {
-      const token = localStorage.getItem('admin_token');
-      if (token) {
-        // Validate token before making API call
-        try {
-          const userData = await adminApi.getCurrentUser();
-          setUser(userData);
-          // Update localStorage with fresh user data
-          localStorage.setItem('admin_user', JSON.stringify(userData));
-        } catch (apiError) {
-          // If token is invalid, clear it
-          console.error('Invalid token:', apiError);
-          localStorage.removeItem('admin_token');
-          localStorage.removeItem('admin_user');
-        }
+      if (!token) return;
+      const userData = await adminApi.getCurrentUser();
+      if (localStorage.getItem('admin_token') === token) {
+        setUser(userData);
+        localStorage.setItem('admin_user', JSON.stringify(userData));
       }
-    } catch (error) {
-      console.error('Auth check failed:', error);
-      localStorage.removeItem('admin_token');
-      localStorage.removeItem('admin_user');
+    } catch (error: any) {
+      if (localStorage.getItem('admin_token') !== token) return;
+      const status = error.response?.status;
+      if (status === 401 || status === 403) {
+        setUser(null);
+        localStorage.removeItem('admin_token');
+        localStorage.removeItem('admin_user');
+      } else {
+        setSessionCheckFailed(true);
+      }
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    checkAuthStatus();
+  }, [checkAuthStatus]);
 
   const login = async (username: string, password: string) => {
     try {
@@ -78,6 +81,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
       
       setUser(userData);
+      setSessionCheckFailed(false);
       localStorage.setItem('admin_user', JSON.stringify(userData));
     } catch (error) {
       // Ensure we're not throwing an error that might cause navigation issues
@@ -93,6 +97,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     localStorage.setItem('admin_token', token);
     localStorage.setItem('admin_user', JSON.stringify(userData));
     setUser(userData);
+    setSessionCheckFailed(false);
   };
 
   const logout = () => {
@@ -101,6 +106,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     
     // Clear user state immediately
     setUser(null);
+    setSessionCheckFailed(false);
     
     // Clear localStorage
     localStorage.removeItem('admin_token');
@@ -129,6 +135,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     updateUser,
     setSession,
     loading,
+    sessionCheckFailed,
+    checkAuthStatus,
     isAuthenticated: !!user,
   };
 

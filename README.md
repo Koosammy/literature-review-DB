@@ -364,6 +364,23 @@ Set `DATABASE_URL` in both backend environments. In the admin backend, also set
 `SECRET_KEY`. For local development, use the `.env` file in each backend
 directory. On Render, use each service's Environment settings.
 
+`ACCESS_TOKEN_EXPIRE_MINUTES` is optional on the admin backend and defaults
+to `480` (eight hours). It applies to new sessions after deployment. Sign in
+again to obtain a token with the new expiration.
+
+### Word Diagram Extraction on Render
+
+For native Word shapes and charts, run the admin backend with the included
+Dockerfile, which installs LibreOffice Writer. In the admin backend's Render
+settings, use the Docker runtime with root directory `admin-portal/backend`
+and Dockerfile path `./Dockerfile`. Use the image's default start command and
+keep the existing environment variables and `/health` health check. On a paid
+service, set the pre-deploy command to `alembic upgrade head` if you use Alembic
+for schema migrations.
+
+After the deploy succeeds, open the project in the admin portal and run
+**Extract from Document** again with **Extract tables** selected.
+
 ### Transactional Email
 
 The admin backend sends activation invitations and password resets using

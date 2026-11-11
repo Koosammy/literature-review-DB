@@ -76,7 +76,12 @@ class AdminApiService {
       instance.interceptors.response.use(
         (response) => response,
         (error) => {
-          if (error.response?.status === 401) {
+          const currentToken = localStorage.getItem('admin_token');
+          if (
+            error.response?.status === 401 &&
+            currentToken &&
+            error.config?.headers?.Authorization === `Bearer ${currentToken}`
+          ) {
             // Check if we're not already on the login page to prevent redirect loops
             const currentPath = window.location.hash;
             const isOnLoginPage = currentPath === '#/login' || currentPath === '#/login/';
@@ -148,8 +153,6 @@ class AdminApiService {
 
   async logout(): Promise<void> {
     await this.api.post('/auth/logout');
-    localStorage.removeItem('admin_token');
-    localStorage.removeItem('admin_user');
   }
 
   async getCurrentUser(): Promise<User> {
