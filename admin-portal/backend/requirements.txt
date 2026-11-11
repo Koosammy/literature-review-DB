@@ -32,12 +32,10 @@ python-multipart>=0.0.6
 PyMuPDF>=1.24.9
 python-docx==1.1.0
 pandas==2.1.4
-matplotlib==3.8.2                    # Fallback table rendering when LibreOffice is unavailable for DOCX
+matplotlib==3.8.2                    # Fonts for rendering native Word tables
 openpyxl==3.1.2
 pdfplumber>=0.9.0                    # Page-level fallback table detector
 
-# Note: DOCX table extraction gets pixel-accurate table crops by converting
-# to PDF with a headless LibreOffice (`soffice`) and reusing the PDF engine.
-# Install the `libreoffice` (or `libreoffice-writer`) system package for
-# full DOCX table fidelity; without it, DOCX tables fall back to text-only
-# extraction rendered with matplotlib.
+# DOCX shape and chart extraction requires headless LibreOffice (`soffice`),
+# which the admin backend Dockerfile installs. Native Word tables and embedded
+# pictures are readable without LibreOffice.

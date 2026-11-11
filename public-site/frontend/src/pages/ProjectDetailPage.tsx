@@ -941,6 +941,7 @@ const RichTextRenderer: React.FC<{ content: string }> = ({ content }) => {
       component="div"
       sx={{ 
         lineHeight: 1.8,
+        fontFamily: 'Aptos, Calibri, "Segoe UI", Arial, sans-serif',
         textAlign: 'justify',
         color: '#000000',
         fontSize: { xs: '0.95rem', sm: '1rem' },

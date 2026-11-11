@@ -73,30 +73,41 @@ class PdfExtractor:
     # ------------------------------------------------------------------ #
     # Public API
     # ------------------------------------------------------------------ #
-    def extract(self, data: bytes) -> ExtractionResult:
+    def extract(
+        self, data: bytes, *, include_tables: bool = True, word_layout: bool = False
+    ) -> ExtractionResult:
         result = ExtractionResult()
         doc = fitz.open(stream=data, filetype="pdf")
         try:
             table_bboxes_by_page: dict[int, List[BBox]] = {}
+            prisma_by_page: dict[int, ExtractedFigure] = {}
 
             for page_index in range(len(doc)):
                 page = doc[page_index]
                 page_no = page_index + 1
                 try:
-                    tables = self._extract_tables_for_page(page, page_no)
+                    prisma = self._find_prisma_figure(page, page_no)
+                    if prisma is not None:
+                        prisma_by_page[page_index] = prisma
+                    tables, bounds = self._extract_tables_for_page(
+                        page, page_no,
+                        include_tables=include_tables,
+                        allow_long_cells=word_layout,
+                        figure_bbox=prisma.bbox if prisma is not None else None,
+                    )
                 except Exception as exc:  # pragma: no cover - defensive
                     logger.warning("Table extraction failed on page %s: %s", page_no, exc)
                     result.warnings.append(f"Table extraction failed on page {page_no}: {exc}")
-                    tables = []
+                    tables, bounds = [], []
                 result.tables.extend(tables)
-                table_bboxes_by_page[page_index] = [t.bbox for t in tables]
+                table_bboxes_by_page[page_index] = bounds
 
             image_hash_page_counts: dict[str, set] = {}
             page_raw_images: List[List[ExtractedFigure]] = []
             for page_index in range(len(doc)):
                 page = doc[page_index]
                 page_no = page_index + 1
-                raster = self._extract_raster_images(doc, page, page_no)
+                raster = [] if word_layout else self._extract_raster_images(doc, page, page_no)
                 page_raw_images.append(raster)
                 for fig in raster:
                     h = sha256_bytes(fig.image_bytes)
@@ -118,25 +129,30 @@ class PdfExtractor:
                         continue
                     kept_raster.append(fig)
 
+                prisma = prisma_by_page.get(page_index)
+                exclude_bboxes = table_bboxes_by_page[page_index] + [f.bbox for f in kept_raster]
+                vector_figs = []
+                if prisma is not None:
+                    prisma.index_on_page = len(kept_raster)
+                    vector_figs.append(prisma)
+                    exclude_bboxes.append(prisma.bbox)
                 try:
-                    vector_figs = self._extract_vector_clusters(
+                    vector_figs.extend(self._extract_vector_clusters(
                         page,
                         page_no,
-                        exclude_bboxes=table_bboxes_by_page.get(page_index, [])
-                        + [f.bbox for f in kept_raster],
-                        start_index=len(kept_raster),
-                    )
+                        exclude_bboxes=exclude_bboxes,
+                        start_index=len(kept_raster) + len(vector_figs),
+                    ))
                 except Exception as exc:  # pragma: no cover - defensive
                     logger.warning("Vector figure detection failed on page %s: %s", page_no, exc)
                     result.warnings.append(f"Vector figure detection failed on page {page_no}: {exc}")
-                    vector_figs = []
 
                 for i, fig in enumerate(kept_raster):
                     fig.index_on_page = i
                 result.figures.extend(kept_raster)
                 result.figures.extend(vector_figs)
 
-            if not result.tables and not result.figures:
+            if not word_layout and not result.tables and not result.figures:
                 result.warnings.append("No tables or figures were detected in this document.")
 
             return result
@@ -146,8 +162,12 @@ class PdfExtractor:
     # ------------------------------------------------------------------ #
     # Tables
     # ------------------------------------------------------------------ #
-    def _extract_tables_for_page(self, page: "fitz.Page", page_no: int) -> List[ExtractedTable]:
+    def _extract_tables_for_page(
+        self, page: "fitz.Page", page_no: int, *, include_tables: bool,
+        allow_long_cells: bool, figure_bbox: Optional[BBox],
+    ) -> tuple[List[ExtractedTable], List[BBox]]:
         tables: List[ExtractedTable] = []
+        bounds: List[BBox] = []
 
         found = page.find_tables()
         candidates = list(found.tables) if found is not None else []
@@ -162,10 +182,15 @@ class PdfExtractor:
             bbox, rows = self._rows_from_candidate(cand, source)
             if bbox is None or rows is None:
                 continue
+            if figure_bbox and overlap_ratio(bbox, figure_bbox) > self.table_overlap_reject_ratio:
+                continue
             rows = normalize_rows(rows)
-            if not rows_look_like_table(rows):
+            if not rows_look_like_table(rows, allow_long_cells=allow_long_cells):
                 continue
             if len(rows) < self.min_table_rows or len(rows[0]) < self.min_table_cols:
+                continue
+            bounds.append(bbox)
+            if not include_tables:
                 continue
 
             df = self._rows_to_dataframe(rows)
@@ -185,7 +210,7 @@ class PdfExtractor:
             )
             idx += 1
 
-        return tables
+        return tables, bounds
 
     def _pdfplumber_tables_for_page(self, page: "fitz.Page"):
         try:
@@ -292,6 +317,31 @@ class PdfExtractor:
     # ------------------------------------------------------------------ #
     # Vector-drawn figures (charts made of native PDF paths, not images)
     # ------------------------------------------------------------------ #
+    def _find_prisma_figure(self, page: "fitz.Page", page_no: int) -> Optional[ExtractedFigure]:
+        labels = ("records identified", "records screened", "studies included")
+        page_text = " ".join(page.get_text().lower().split())
+        if not all(label in page_text for label in labels):
+            return None
+
+        # The vertical stage labels and horizontal arrows are separate
+        # Word shapes. Bridge the gaps between them and the record boxes.
+        for rect in page.cluster_drawings(x_tolerance=24, y_tolerance=24):
+            text = " ".join(page.get_text(clip=rect).lower().split())
+            if not all(label in text for label in labels):
+                continue
+            bbox = pad_bbox(tuple(rect), 4.0, clamp=tuple(page.rect))
+            return ExtractedFigure(
+                page_number=page_no,
+                index_on_page=0,
+                bbox=bbox,
+                image_bytes=self._crop_page(page, bbox, self.figure_zoom),
+                width=round((bbox[2] - bbox[0]) * self.figure_zoom),
+                height=round((bbox[3] - bbox[1]) * self.figure_zoom),
+                source="vector-cluster",
+                caption="Figure PRISMA flow diagram",
+            )
+        return None
+
     def _extract_vector_clusters(
         self,
         page: "fitz.Page",

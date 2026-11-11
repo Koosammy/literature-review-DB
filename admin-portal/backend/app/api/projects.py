@@ -1045,13 +1045,13 @@ async def extract_images_from_project_document(
         )
         
         # Get breakdown of extracted items
-        all_images = db.query(ProjectImage).filter(ProjectImage.project_id == project_id).all()
-        table_count = sum(1 for img in all_images if img.filename.startswith('table_'))
-        figure_count = sum(1 for img in all_images if img.filename.startswith('figure_'))
+        filenames = db.query(ProjectImage.filename).filter(ProjectImage.project_id == project_id).all()
+        table_count = sum(1 for (filename,) in filenames if filename.startswith('table_'))
+        figure_count = sum(1 for (filename,) in filenames if filename.startswith('figure_'))
         
         return {
             "message": f"Extracted {extracted_count} items",
-            "total_images": len(all_images),
+            "total_images": len(filenames),
             "figures": figure_count,
             "tables": table_count,
             "extract_tables": extract_tables

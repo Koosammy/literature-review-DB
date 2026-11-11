@@ -51,7 +51,9 @@ def pad_bbox(b: BBox, pad: float, clamp: Optional[BBox] = None) -> BBox:
     return (x0, y0, x1, y1)
 
 
-def rows_look_like_table(rows: Sequence[Sequence[Optional[str]]]) -> bool:
+def rows_look_like_table(
+    rows: Sequence[Sequence[Optional[str]]], *, allow_long_cells: bool = False
+) -> bool:
     """Structural sanity check for a detected table's cell grid.
 
     The detectors (PyMuPDF / pdfplumber) already locate tables geometrically
@@ -77,7 +79,7 @@ def rows_look_like_table(rows: Sequence[Sequence[Optional[str]]]) -> bool:
     avg_len = sum(len(c) for c in nonempty) / max(len(nonempty), 1)
     # A "table" with very few columns and long free-text cells is almost
     # always a mis-detected paragraph rather than tabular data.
-    if ncols <= 2 and avg_len > 60:
+    if not allow_long_cells and ncols <= 2 and avg_len > 60:
         return False
 
     return True

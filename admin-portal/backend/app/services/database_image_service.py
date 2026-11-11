@@ -59,11 +59,17 @@ class DatabaseImageService:
         db: Session,
         order_index: int = 0,
         is_featured: bool = False
-    ) -> ProjectImage:
-        """Save image bytes directly to database (for extraction)"""
+    ) -> ProjectImage | None:
+        """Stage a new extracted image unless the project already has it."""
         # Optimize image
         optimized_content = await self._optimize_image_bytes(image_bytes, filename)
         
+        existing = db.query(ProjectImage.id).filter_by(
+            project_id=project_id, filename=filename, image_data=optimized_content,
+        ).first()
+        if existing is not None:
+            return None
+
         # Determine content type
         content_type = self._get_content_type(filename)
         
@@ -79,8 +85,7 @@ class DatabaseImageService:
         )
         
         db.add(db_image)
-        db.commit()
-        db.refresh(db_image)
+        db.flush()
         
         return db_image
 

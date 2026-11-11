@@ -1,17 +1,9 @@
 """DOCX table and figure extraction.
 
-Strategy: DOCX has no fixed page layout, so there is no way to "crop the
-real page" the way the PDF engine does. Instead we convert the document to
-PDF with a headless LibreOffice (which renders it exactly as Word would)
-and reuse :class:`PdfExtractor` on the result -- this gives DOCX tables the
-same pixel-accurate crops as PDF tables, including merged cells and
-multi-line headers that a from-scratch re-typeset would get wrong.
-
-Embedded images are read directly from the .docx zip (``word/media/*``)
-rather than from the converted PDF, since that avoids an extra lossy
-re-encode. If LibreOffice isn't installed, we fall back to a pure
-python-docx table reader (cell text only, no pixel-perfect crop) so the
-tool still works, just with lower table fidelity.
+Read native tables from the Word grid so a table spanning multiple pages
+is saved once with all its rows. Read embedded pictures directly from
+``word/media/*`` at their original resolution. For shapes and charts,
+render the document with LibreOffice and crop the resulting PDF.
 """
 
 from __future__ import annotations
@@ -103,8 +95,7 @@ def _docx_table_grid(table) -> List[List[Optional[tuple]]]:
 
 
 def _docx_table_header_and_body(table) -> tuple:
-    """Read a python-docx Table into (header, body_rows), correctly merging
-    a header that spans more than one physical table row.
+    """Read the title, header, body rows, and cell fills of a Word table.
 
     A merged parent header cell (e.g. one "Delivery" cell horizontally
     spanning two columns via Word's gridSpan) is ambiguous on its own: both
@@ -121,9 +112,14 @@ def _docx_table_header_and_body(table) -> tuple:
     """
     grid_rows = _docx_table_grid(table)
     if not grid_rows:
-        return [], [], []
+        return "", [], [], []
 
     n_cols = len(grid_rows[0])
+    title = ""
+    first_cell = grid_rows[0][0] if n_cols else None
+    if len(grid_rows) >= 3 and first_cell and first_cell[1] == n_cols and n_cols > 1:
+        title = first_cell[0]
+        grid_rows = grid_rows[1:]
     header_parts = [[grid_rows[0][c][0] if grid_rows[0][c] else ""] for c in range(n_cols)]
     resolved = [not grid_rows[0][c] or grid_rows[0][c][1] == 1 for c in range(n_cols)]
 
@@ -184,7 +180,7 @@ def _docx_table_header_and_body(table) -> tuple:
         body_rows.append(row_vals)
         body_fills.append(row_fills)
 
-    return header, body_rows, body_fills
+    return title, header, body_rows, body_fills
 
 
 class DocxExtractor:
@@ -199,18 +195,22 @@ class DocxExtractor:
         self.min_image_bytes = min_image_bytes
         self.libreoffice_timeout = libreoffice_timeout
 
-    def extract(self, data: bytes) -> ExtractionResult:
+    def extract(self, data: bytes, *, include_tables: bool = True) -> ExtractionResult:
         result = ExtractionResult()
 
         media_images = self._extract_media_images(data)
         result.figures.extend(media_images)
 
+        if include_tables:
+            result.tables.extend(self._extract_word_tables(data))
+
         pdf_bytes = self._convert_to_pdf(data)
         if pdf_bytes is not None:
-            pdf_result = self.pdf_extractor.extract(pdf_bytes)
-            result.tables.extend(pdf_result.tables)
-            for t in result.tables:
-                t.source = "docx-via-pdf"
+            # Word provides the full table grid, including rows split across
+            # pages. Use the rendered PDF for drawings and table boundaries.
+            pdf_result = self.pdf_extractor.extract(
+                pdf_bytes, include_tables=False, word_layout=True
+            )
             # Only keep vector-drawn figures from the PDF route; raster
             # images are already covered (at original quality) by the
             # direct zip extraction above.
@@ -221,10 +221,9 @@ class DocxExtractor:
             result.warnings.extend(pdf_result.warnings)
         else:
             result.warnings.append(
-                "LibreOffice was unavailable; falling back to text-only table extraction "
-                "(tables will not have pixel-accurate images)."
+                "The Word document could not be rendered. Embedded pictures "
+                "and native tables can still be extracted, but Word shapes and charts require LibreOffice."
             )
-            result.tables.extend(self._extract_tables_fallback(data))
 
         if not result.tables and not result.figures:
             result.warnings.append("No tables or figures were detected in this document.")
@@ -312,6 +311,7 @@ class DocxExtractor:
                 subprocess.run(
                     [
                         soffice,
+                        f"-env:UserInstallation={(tmp_path / 'profile').as_uri()}",
                         "--headless",
                         "--norestore",
                         "--convert-to",
@@ -335,9 +335,9 @@ class DocxExtractor:
             return out.read_bytes()
 
     # ------------------------------------------------------------------ #
-    # Fallback: text-only tables via python-docx (no LibreOffice)
+    # Tables from the Word document grid
     # ------------------------------------------------------------------ #
-    def _extract_tables_fallback(self, data: bytes) -> List[ExtractedTable]:
+    def _extract_word_tables(self, data: bytes) -> List[ExtractedTable]:
         import io as _io
 
         from docx import Document
@@ -352,17 +352,17 @@ class DocxExtractor:
             return tables
 
         for idx, table in enumerate(doc.tables):
-            header, body, fills = _docx_table_header_and_body(table)
+            title, header, body, fills = _docx_table_header_and_body(table)
             if not header:
                 continue
             rows = normalize_rows([header] + body)
-            if not rows_look_like_table(rows):
+            if not rows_look_like_table(rows, allow_long_cells=True):
                 continue
             header, body = rows[0], rows[1:]
 
             df = pd.DataFrame(body, columns=dedupe_column_names(header))
 
-            image_bytes = self._render_table_image(df, f"Table {idx + 1}", cell_fills=fills)
+            image_bytes = self._render_table_image(df, title or f"Table {idx + 1}", cell_fills=fills)
             tables.append(
                 ExtractedTable(
                     page_number=0,
@@ -413,7 +413,7 @@ class DocxExtractor:
         n_cols = len(columns)
 
         pad_x, pad_y, line_gap = 12, 8, 4
-        min_col_w, max_col_w = 90, 280
+        min_col_w, max_col_w = 90, 620 if n_cols == 2 else 280
 
         measure_img = Image.new("RGB", (1, 1))
         measure_draw = ImageDraw.Draw(measure_img)
@@ -467,15 +467,18 @@ class DocxExtractor:
             row_heights.append(max((len(cl) for cl in cell_lines), default=1) * reg_line_h + 2 * pad_y)
 
         table_w = sum(col_widths)
-        title_h = line_height(title_font) + 2 * pad_y if title else 0
+        title_lines = wrap(title, title_font, table_w) if title else []
+        title_h = len(title_lines) * line_height(title_font) + 2 * pad_y if title_lines else 0
         table_h = header_h + sum(row_heights)
 
         img = Image.new("RGB", (table_w + 1, title_h + table_h + 1), "white")
         draw = ImageDraw.Draw(img)
 
         y = 0
-        if title:
-            draw.text((table_w / 2, title_h / 2), title, font=title_font, fill="#1a1a1a", anchor="mm")
+        if title_lines:
+            for i, line in enumerate(title_lines):
+                draw.text((table_w / 2, pad_y + i * line_height(title_font)),
+                          line, font=title_font, fill="#1a1a1a", anchor="mt")
             y = title_h
 
         header_top = y

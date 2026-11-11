@@ -1,6 +1,6 @@
 import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
-import { Box, CircularProgress } from '@mui/material';
+import { Alert, Box, Button, CircularProgress } from '@mui/material';
 import { useAuth } from '../contexts/AuthContext';
 
 interface ProtectedRouteProps {
@@ -8,7 +8,7 @@ interface ProtectedRouteProps {
 }
 
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading, sessionCheckFailed, checkAuthStatus } = useAuth();
   const location = useLocation();
 
   if (loading) {
@@ -22,6 +22,16 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
         }}
       >
         <CircularProgress />
+      </Box>
+    );
+  }
+
+  if (sessionCheckFailed) {
+    return (
+      <Box sx={{ display: 'grid', placeItems: 'center', minHeight: '100vh', p: 2 }}>
+        <Alert severity="warning" action={<Button color="inherit" onClick={checkAuthStatus}>Retry</Button>}>
+          The admin backend could not verify your session. Try again when it is available.
+        </Alert>
       </Box>
     );
   }
