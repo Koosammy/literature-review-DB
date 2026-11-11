@@ -50,7 +50,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, index = 0, onClick, 
         mx: { xs: 'auto', sm: 0 },
         display: 'flex',
         flexDirection: 'column',
-        borderRadius: { xs: 3, md: 4 },
+        borderRadius: { xs: '18px', sm: 3, md: 4 },
         overflow: 'hidden',
         cursor: 'pointer',
         position: 'relative',
@@ -71,7 +71,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, index = 0, onClick, 
     >
       <Box
         sx={{
-          height: compact ? { xs: 84, sm: 92, md: 100 } : { xs: 92, sm: 100, md: 112 },
+          height: { xs: 52, sm: 100, md: 112 },
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -82,10 +82,10 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, index = 0, onClick, 
           src={logoUrl}
           variant="rounded"
           sx={{
-            width: { xs: 52, md: 60 },
-            height: { xs: 52, md: 60 },
+            width: { xs: 34, sm: 52, md: 60 },
+            height: { xs: 34, sm: 52, md: 60 },
             bgcolor: 'white',
-            p: 0.7,
+            p: { xs: 0.35, sm: 0.7 },
             border: '3px solid rgba(255,255,255,0.6)',
             boxShadow: '0 10px 24px rgba(6, 78, 59, 0.24)'
           }}
@@ -94,45 +94,93 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, index = 0, onClick, 
         </Avatar>
       </Box>
 
-      <CardContent sx={{ flexGrow: 1, pt: { xs: 2, md: 2.5 }, px: { xs: 2.2, md: 3 }, pb: 2 }}>
+      <CardContent sx={{
+        flexGrow: 1,
+        pt: { xs: 1, sm: 2, md: 2.5 },
+        px: { xs: 1, sm: 2.2, md: 3 },
+        pb: { xs: 1, sm: 2 }
+      }}>
         <Typography
           variant="h6"
           component="h3"
-          noWrap
+          noWrap={!compact}
           title={project.title}
           sx={{
             fontWeight: 900,
             color: '#064e3b',
             letterSpacing: '-0.02em',
             lineHeight: 1.22,
-            fontSize: compact ? { xs: '1rem', md: '1.12rem' } : { xs: '1.05rem', md: '1.22rem' },
-            mb: 1.4
+            fontSize: { xs: '0.82rem', sm: '1.05rem', md: '1.22rem' },
+            mb: { xs: 0.75, sm: 1.4 },
+            ...(compact && {
+              minHeight: '2.44em',
+              display: '-webkit-box',
+              WebkitBoxOrient: 'vertical',
+              WebkitLineClamp: 2,
+              overflow: 'hidden',
+              overflowWrap: 'anywhere'
+            })
           }}
         >
           {project.title}
         </Typography>
 
 
-        <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: 'wrap', rowGap: 1 }}>
-          {project.degree_type && <Chip label={project.degree_type} size="small" icon={<SchoolIcon />} sx={{ bgcolor: '#ecfdf5', color: '#047857', fontWeight: 800, border: '1px solid #bbf7d0' }} />}
-        </Stack>
+        {project.degree_type && (
+          <Chip
+            label={project.degree_type}
+            size="small"
+            icon={<SchoolIcon />}
+            sx={{
+              mb: { xs: 0.75, sm: 2 },
+              height: { xs: 20, sm: 24 },
+              fontSize: { xs: '0.65rem', sm: '0.8125rem' },
+              bgcolor: '#ecfdf5',
+              color: '#047857',
+              fontWeight: 800,
+              border: '1px solid #bbf7d0',
+              '& .MuiChip-icon': { fontSize: { xs: 14, sm: 18 } }
+            }}
+          />
+        )}
 
-        <Box sx={{ p: 1.35, borderRadius: 2.5, bgcolor: '#f8fafc', border: '1px solid #e2e8f0' }}>
-          <Stack direction="row" spacing={1} alignItems="center">
-            <PersonIcon sx={{ color: '#0f766e', fontSize: 18, flexShrink: 0 }} />
-            <Typography variant="caption" sx={{ color: '#334155', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <Box sx={{ p: { xs: 0.5, sm: 1.35 }, borderRadius: 2.5, bgcolor: '#f8fafc', border: '1px solid #e2e8f0' }}>
+          <Stack direction="row" spacing={{ xs: 0.4, sm: 1 }} alignItems="center">
+            <PersonIcon sx={{ color: '#0f766e', fontSize: { xs: 14, sm: 18 }, flexShrink: 0 }} />
+            <Typography variant="caption" noWrap sx={{ color: '#334155', fontWeight: 700, fontSize: { xs: '0.65rem', sm: '0.75rem' } }}>
               {project.author_name}{project.institution ? ` • ${project.institution}` : ''}
             </Typography>
           </Stack>
         </Box>
       </CardContent>
 
-      <CardActions sx={{ px: { xs: 2.2, md: 3 }, py: 2, borderTop: '1px solid #eef2f7', justifyContent: 'space-between' }}>
-        <Stack direction="row" spacing={2.2} alignItems="center" sx={{ color: '#64748b' }}>
+      <CardActions disableSpacing sx={{
+        px: { xs: 1, sm: 2.2, md: 3 },
+        py: { xs: 0, sm: 2 },
+        borderTop: '1px solid #eef2f7',
+        justifyContent: 'space-between',
+        flexWrap: { xs: 'wrap', sm: 'nowrap' }
+      }}>
+        <Stack direction="row" spacing={{ xs: 0.5, sm: 2.2 }} alignItems="center" sx={{
+          color: '#64748b',
+          '& .MuiSvgIcon-root': { fontSize: { xs: 13, sm: 18 } },
+          '& .MuiTypography-root': { fontSize: { xs: '0.65rem', sm: '0.875rem' } }
+        }}>
           <Stack direction="row" spacing={0.5} alignItems="center"><ViewIcon sx={{ fontSize: 18 }} /><Typography variant="body2" fontWeight={700}>{project.view_count || 0}</Typography></Stack>
           <Stack direction="row" spacing={0.5} alignItems="center"><DownloadIcon sx={{ fontSize: 18 }} /><Typography variant="body2" fontWeight={700}>{project.download_count || 0}</Typography></Stack>
         </Stack>
-        <Button className="project-card-cta" endIcon={<ArrowIcon />} sx={{ color: '#0f766e', fontWeight: 900, textTransform: 'none', transition: 'transform 180ms ease' }}>View</Button>
+        <Button className="project-card-cta" endIcon={<ArrowIcon />} sx={{
+          color: '#0f766e',
+          fontWeight: 900,
+          textTransform: 'none',
+          transition: 'transform 180ms ease',
+          minWidth: { xs: 0, sm: 64 },
+          minHeight: { xs: 44, sm: 'auto' },
+          px: { xs: 0.5, sm: 1 },
+          fontSize: { xs: '0.72rem', sm: '0.875rem' },
+          '& .MuiButton-endIcon': { ml: { xs: 0.4, sm: 1 } },
+          '& .MuiButton-endIcon .MuiSvgIcon-root': { fontSize: { xs: 14, sm: 20 } }
+        }}>View</Button>
       </CardActions>
     </Card>
   );

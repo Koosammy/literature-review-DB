@@ -942,6 +942,8 @@ const RichTextRenderer: React.FC<{ content: string }> = ({ content }) => {
       sx={{ 
         lineHeight: 1.8,
         fontFamily: 'Aptos, Calibri, "Segoe UI", Arial, sans-serif',
+        // Saved Word markup can contain fonts on individual paragraphs and spans.
+        '& :where(:not(pre, code))': { fontFamily: 'inherit !important' },
         textAlign: 'justify',
         color: '#000000',
         fontSize: { xs: '0.95rem', sm: '1rem' },
