@@ -804,9 +804,9 @@ const ProjectsPage: React.FC = () => {
           <>
             <Grid container spacing={{ xs: 1, sm: 1.5, md: 2, lg: 3 }}>
               {searchResponse.projects.map((project, index) => (
-                <Grid item xs={12} sm={6} md={4} lg={4} key={project.id}>
+                <Grid item xs={6} md={4} key={project.id}>
                   <Zoom in timeout={300 + index * 50}>
-                    <Box>
+                    <Box sx={{ height: '100%' }}>
                       <ProjectCard
                         project={project}
                         index={index}

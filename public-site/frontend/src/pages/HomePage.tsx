@@ -892,12 +892,12 @@ const HomePage: React.FC = () => {
           {loading ? (
             <Grid container spacing={{ xs: 1.5, sm: 2, md: 3, lg: 4 }}>
               {[1, 2, 3].map((item) => (
-                <Grid item xs={12} sm={6} lg={4} key={item}>
+                <Grid item xs={6} lg={4} key={item}>
                   <Skeleton 
                     variant="rectangular" 
                     sx={{ 
-                      height: { xs: 300, sm: 350, md: 400 },
-                      borderRadius: { xs: 3, md: 4 } 
+                      height: { xs: 185, sm: 350, md: 400 },
+                      borderRadius: { xs: '18px', sm: 3, md: 4 }
                     }} 
                   />
                 </Grid>
@@ -905,13 +905,14 @@ const HomePage: React.FC = () => {
             </Grid>
           ) : featuredProjects.length > 0 ? (
             <Grid container spacing={{ xs: 1.5, sm: 2, md: 3, lg: 4 }}>
-              {featuredProjects.slice(0, isMobile ? 3 : 6).map((project, index) => (
-                <Grid item xs={12} sm={6} lg={4} key={project.id}>
+              {featuredProjects.slice(0, isMobile ? 4 : 6).map((project, index) => (
+                <Grid item xs={6} lg={4} key={project.id}>
                   <motion.div
                     initial={{ opacity: 0, y: 30 }}
                     whileInView={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.5, delay: index * 0.1 }}
                     viewport={{ once: true }}
+                    style={{ height: '100%' }}
                   >
                     <ProjectCard
                       project={project}
@@ -1095,6 +1096,7 @@ const HomePage: React.FC = () => {
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
+                        mx: 'auto',
                         mb: { xs: 2, sm: 2.5, md: 3 },
                         transition: 'all 0.3s ease'
                       }}

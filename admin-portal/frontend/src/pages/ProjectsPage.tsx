@@ -123,6 +123,12 @@ const htmlToPlainText = (html: string): string => {
   return tempDiv.textContent || tempDiv.innerText || '';
 };
 
+const abstractTypography = {
+  fontFamily: 'Aptos, Calibri, "Segoe UI", Arial, sans-serif',
+  // Word paste can set a font on every span, overriding the container.
+  '& :where(:not(pre, code))': { fontFamily: 'inherit !important' }
+};
+
 const ProjectsPage: React.FC = () => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1601,7 +1607,7 @@ const ProjectsPage: React.FC = () => {
                                 },
                                 fontSize: '1rem',
                                 lineHeight: 1.6,
-                                fontFamily: 'Aptos, Calibri, "Segoe UI", Arial, sans-serif',
+                                ...abstractTypography,
                                 '& blockquote': {
                                   borderLeft: '3px solid #0a4f3c',
                                   paddingLeft: 2,
@@ -1666,7 +1672,7 @@ const ProjectsPage: React.FC = () => {
                               minHeight: abstractFullscreen ? 400 : 150,
                               maxHeight: abstractFullscreen ? 'calc(90vh - 200px)' : 300,
                               overflow: 'auto',
-                              fontFamily: 'Aptos, Calibri, "Segoe UI", Arial, sans-serif'
+                              ...abstractTypography
                             }}
                             dangerouslySetInnerHTML={{ __html: formData.abstract }}
                           />
