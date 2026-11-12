@@ -170,7 +170,9 @@ class PdfExtractor:
         tables: List[ExtractedTable] = []
         bounds: List[BBox] = []
 
-        found = page.find_tables()
+        # Layout analysis can crash on PDFs rendered from Word documents.
+        # Line-based detection still provides the bounds used to filter figures.
+        found = page.find_tables(use_layout=False)
         candidates = list(found.tables) if found is not None else []
         source = "pymupdf"
 
