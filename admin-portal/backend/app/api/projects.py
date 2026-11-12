@@ -20,7 +20,7 @@ from ..core.config import settings
 from ..core.constants import RESEARCH_AREAS, DEGREE_TYPES, ACADEMIC_YEARS, INSTITUTIONS
 from ..services.database_storage import database_storage
 from ..services.database_image_service import DatabaseImageService
-from ..services.document_image_extractor import DocumentImageExtractor
+from ..services.document_image_extractor import DocumentImageExtractor, ExtractionError
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -1058,6 +1058,9 @@ async def extract_images_from_project_document(
         }
     except HTTPException:
         raise
+    except ExtractionError as exc:
+        logger.warning("Document extraction failed for project %s: %s", project_id, exc)
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as e:
         logger.error(f"Failed to extract images for project {project_id}: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to extract images")
