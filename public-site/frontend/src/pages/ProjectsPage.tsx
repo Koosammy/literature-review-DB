@@ -809,7 +809,6 @@ const ProjectsPage: React.FC = () => {
                     <Box sx={{ height: '100%' }}>
                       <ProjectCard
                         project={project}
-                        index={index}
                         compact={isMobile}
                         onClick={() => navigate(`/projects/${project.slug}`)}
                       />
