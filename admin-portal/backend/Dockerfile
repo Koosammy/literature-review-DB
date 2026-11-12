@@ -4,7 +4,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 WORKDIR /app
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libreoffice-writer fonts-carlito fonts-liberation \
+    && apt-get install -y --no-install-recommends libreoffice-writer fonts-liberation \
+    && soffice --headless --version \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
