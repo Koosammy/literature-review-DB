@@ -22,23 +22,13 @@ import { ProjectSummary } from '../types';
 
 interface ProjectCardProps {
   project: ProjectSummary;
-  index?: number;
   onClick: () => void;
   compact?: boolean;
 }
 
-const CARD_GRADIENTS = [
-  ['#064e3b', '#0f766e'],
-  ['#14532d', '#15803d'],
-  ['#0f3f3a', '#2a9d8f'],
-  ['#0b4f6c', '#0f766e']
-];
-
 const logoUrl = `${process.env.PUBLIC_URL || ''}/images/school-logo.jpeg`;
 
-const ProjectCard: React.FC<ProjectCardProps> = ({ project, index = 0, onClick, compact = false }) => {
-  const gradient = CARD_GRADIENTS[index % CARD_GRADIENTS.length];
-
+const ProjectCard: React.FC<ProjectCardProps> = ({ project, onClick, compact = false }) => {
   return (
     <Card
       elevation={0}
@@ -75,7 +65,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, index = 0, onClick, 
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          background: `linear-gradient(135deg, ${gradient[0]} 0%, ${gradient[1]} 100%)`
+          background: 'linear-gradient(135deg, #14532d 0%, #15803d 100%)'
         }}
       >
         <Avatar
