@@ -29,6 +29,7 @@ import pandas as pd
 import pymupdf as fitz
 
 from .models import BBox, ExtractedFigure, ExtractedTable, ExtractionResult
+from .prisma_labels import repair_stage_labels
 from .utils import (
     dedupe_column_names,
     looks_like_header_row,
@@ -86,7 +87,7 @@ class PdfExtractor:
                 page = doc[page_index]
                 page_no = page_index + 1
                 try:
-                    prisma = self._find_prisma_figure(page, page_no)
+                    prisma = self._find_prisma_figure(page, page_no, repair_word_labels=word_layout)
                     if prisma is not None:
                         prisma_by_page[page_index] = prisma
                     tables, bounds = self._extract_tables_for_page(
@@ -317,7 +318,9 @@ class PdfExtractor:
     # ------------------------------------------------------------------ #
     # Vector-drawn figures (charts made of native PDF paths, not images)
     # ------------------------------------------------------------------ #
-    def _find_prisma_figure(self, page: "fitz.Page", page_no: int) -> Optional[ExtractedFigure]:
+    def _find_prisma_figure(
+        self, page: "fitz.Page", page_no: int, *, repair_word_labels: bool = False
+    ) -> Optional[ExtractedFigure]:
         labels = ("records identified", "records screened", "studies included")
         page_text = " ".join(page.get_text().lower().split())
         if not all(label in page_text for label in labels):
@@ -330,11 +333,20 @@ class PdfExtractor:
             if not all(label in text for label in labels):
                 continue
             bbox = pad_bbox(tuple(rect), 4.0, clamp=tuple(page.rect))
+            image_bytes = None
+            if repair_word_labels:
+                try:
+                    repaired = repair_stage_labels(page, rect)
+                    if repaired is not None:
+                        with fitz.open(stream=repaired, filetype="svg") as svg:
+                            image_bytes = self._crop_page(svg[0], bbox, self.figure_zoom)
+                except Exception as exc:
+                    logger.warning("Could not reposition Word PRISMA labels on page %s: %s", page_no, exc)
             return ExtractedFigure(
                 page_number=page_no,
                 index_on_page=0,
                 bbox=bbox,
-                image_bytes=self._crop_page(page, bbox, self.figure_zoom),
+                image_bytes=image_bytes or self._crop_page(page, bbox, self.figure_zoom),
                 width=round((bbox[2] - bbox[0]) * self.figure_zoom),
                 height=round((bbox[3] - bbox[1]) * self.figure_zoom),
                 source="vector-cluster",
