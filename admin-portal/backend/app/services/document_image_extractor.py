@@ -11,26 +11,67 @@ the rest of the app already calls.
 """
 
 import asyncio
+import json
 import logging
+import os
+import signal
+import sys
+from contextlib import suppress
 from itertools import chain
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from .database_image_service import DatabaseImageService
-from .extraction import ExtractionResult
-from .extraction.docx_engine import DocxExtractor
-from .extraction.pdf_engine import PdfExtractor
-
 logger = logging.getLogger(__name__)
+
+
+class ExtractionError(RuntimeError):
+    """The document could not be processed by the extraction subprocess."""
 
 
 class DocumentImageExtractor:
     def __init__(self, db_image_service: DatabaseImageService):
         self.db_image_service = db_image_service
-        self.pdf_extractor = PdfExtractor()
-        self.docx_extractor = DocxExtractor(pdf_extractor=self.pdf_extractor)
+        self.extraction_slot = asyncio.Semaphore(1)
+
+    async def _run_extraction(self, source: Path, output: Path, extract_tables: bool) -> None:
+        # PyMuPDF requires process isolation. Limit simultaneous conversions
+        # so repeated clicks or background jobs cannot start multiple renderers.
+        async with self.extraction_slot:
+            args = [
+                sys.executable, "-X", "faulthandler", "-m", "extraction.cli",
+                str(source), "--out", str(output),
+            ]
+            if not extract_tables:
+                args.append("--no-tables")
+            process = await asyncio.create_subprocess_exec(
+                *args,
+                cwd=Path(__file__).resolve().parent,
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.PIPE,
+                start_new_session=os.name == "posix",
+            )
+            try:
+                _, stderr = await process.communicate()
+            except asyncio.CancelledError:
+                with suppress(ProcessLookupError):
+                    if os.name == "posix":
+                        os.killpg(process.pid, signal.SIGKILL)
+                    else:
+                        process.kill()
+                await process.wait()
+                raise
+            if process.returncode:
+                logger.error(
+                    "Document extraction subprocess exited with status %s: %s",
+                    process.returncode, stderr.decode(errors="replace")[-4000:],
+                )
+                raise ExtractionError(
+                    "The extractor stopped while processing this document. No images were saved by this attempt."
+                )
 
     async def extract_images_from_document(
         self,
@@ -42,62 +83,54 @@ class DocumentImageExtractor:
     ) -> int:
         """Extract images and tables from a document and save them to the DB."""
         file_ext = Path(filename).suffix.lower()
-
-        if file_ext == ".pdf":
-            engine = self.pdf_extractor
-        elif file_ext in (".docx", ".doc"):
-            engine = self.docx_extractor
-        else:
+        if file_ext not in (".pdf", ".docx", ".doc"):
             return 0
 
-        try:
-            result: ExtractionResult = await asyncio.to_thread(
-                engine.extract, document_data, include_tables=extract_tables
-            )
-        except Exception as exc:
-            logger.error("Extraction failed for %s (project %s): %s", filename, project_id, exc)
-            return 0
+        with TemporaryDirectory(prefix="research-hub-extraction-") as directory:
+            source = Path(directory) / f"document{file_ext}"
+            output = Path(directory) / "output"
+            source.write_bytes(document_data)
+            logger.info("Starting document extraction for project %s", project_id)
+            try:
+                await asyncio.wait_for(self._run_extraction(source, output, extract_tables), timeout=105)
+            except asyncio.TimeoutError as exc:
+                raise ExtractionError("Document extraction timed out. Try again when the backend is idle.") from exc
 
-        for warning in result.warnings:
-            logger.warning("Extraction warning for %s (project %s): %s", filename, project_id, warning)
+            result = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
+            for warning in result["warnings"]:
+                logger.warning("Extraction warning for project %s: %s", project_id, warning)
 
-        from ..models.project import Project, ProjectImage
+            from ..models.project import Project, ProjectImage
 
-        # Serialize extraction saves so simultaneous retries cannot insert
-        # the same images or assign the same order within a project.
-        if db.query(Project.id).filter_by(id=project_id).with_for_update().first() is None:
-            return 0
-        last_index = db.query(func.max(ProjectImage.order_index)).filter_by(project_id=project_id).scalar()
-        start_index = 0 if last_index is None else last_index + 1
-        saved_count = 0
+            # Serialize extraction saves so retries cannot insert duplicate
+            # images or assign the same order within a project.
+            if db.query(Project.id).filter_by(id=project_id).with_for_update().first() is None:
+                return 0
+            last_index = db.query(func.max(ProjectImage.order_index)).filter_by(project_id=project_id).scalar()
+            start_index = 0 if last_index is None else last_index + 1
+            saved_count = 0
 
-        for item, is_figure in chain(
-            ((table, False) for table in result.tables),
-            ((figure, True) for figure in result.figures),
-        ):
-            caption_slug = _slugify(item.caption) if item.caption else item.filename_stub
-            prefix = "figure_" if is_figure else "table_"
-            if not caption_slug.startswith(prefix):
-                caption_slug = prefix + caption_slug
-            saved = await self.db_image_service.save_image_bytes_to_db(
-                image_bytes=item.image_bytes,
-                filename=f"{caption_slug}.png",
-                project_id=project_id,
-                db=db,
-                order_index=start_index + saved_count,
-                is_featured=is_figure and start_index == 0 and saved_count == 0,
-            )
-            if saved is not None:
-                saved_count += 1
-        db.commit()
+            for item, prefix in chain(
+                ((table, "table_") for table in result["tables"]),
+                ((figure, "figure_") for figure in result["figures"]),
+            ):
+                path = output / item["image"]
+                caption_slug = _slugify(item["caption"]) if item["caption"] else path.stem
+                if not caption_slug.startswith(prefix):
+                    caption_slug = prefix + caption_slug
+                saved = await self.db_image_service.save_image_bytes_to_db(
+                    image_bytes=path.read_bytes(),
+                    filename=f"{caption_slug}.png",
+                    project_id=project_id,
+                    db=db,
+                    order_index=start_index + saved_count,
+                    is_featured=prefix == "figure_" and start_index == 0 and saved_count == 0,
+                )
+                if saved is not None:
+                    saved_count += 1
+            db.commit()
 
-        logger.info(
-            "Extracted %s from %s for project %s (%s)",
-            result.summary(),
-            filename,
-            project_id,
-            f"{saved_count} saved",
-        )
+        logger.info("Saved %s extracted images for project %s", saved_count, project_id)
         return saved_count
 
 

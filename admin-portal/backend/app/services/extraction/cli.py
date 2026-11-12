@@ -23,14 +23,14 @@ from .models import ExtractionResult
 from .pdf_engine import PdfExtractor
 
 
-def run(input_path: Path, out_dir: Path) -> ExtractionResult:
+def run(input_path: Path, out_dir: Path, *, include_tables: bool = True) -> ExtractionResult:
     data = input_path.read_bytes()
     ext = input_path.suffix.lower()
 
     if ext == ".pdf":
-        result = PdfExtractor().extract(data)
+        result = PdfExtractor().extract(data, include_tables=include_tables)
     elif ext in (".docx", ".doc"):
-        result = DocxExtractor().extract(data)
+        result = DocxExtractor().extract(data, include_tables=include_tables)
     else:
         raise SystemExit(f"Unsupported file type: {ext}")
 
@@ -82,13 +82,14 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Extract tables and figures from a PDF or DOCX file.")
     parser.add_argument("input", type=Path, help="Path to a .pdf or .docx file")
     parser.add_argument("--out", type=Path, default=Path("extraction_output"), help="Output directory")
+    parser.add_argument("--no-tables", action="store_true", help="Only extract figures")
     args = parser.parse_args(argv)
 
     if not args.input.exists():
         print(f"Input file not found: {args.input}", file=sys.stderr)
         return 1
 
-    result = run(args.input, args.out)
+    result = run(args.input, args.out, include_tables=not args.no_tables)
     print(f"Extracted {result.summary()} -> {args.out}")
     for w in result.warnings:
         print(f"  warning: {w}")
